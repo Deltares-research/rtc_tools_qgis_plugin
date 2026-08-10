@@ -4,10 +4,16 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
 
 ## Features
 
-- **Map Interaction**: Add model elements (e.g. `Node`) by clicking directly on the QGIS map canvas.
-- **QGIS Memory Layer**: Placed elements are displayed on a dedicated vector memory layer (`RTC-Tools Elements`) with custom styling and point labels.
-- **Property Management**: View and edit element properties (ID, name, element type, coordinates, and custom key-value metadata) via a dedicated editor dialog or table view.
-- **JSON Export / Import**: Save constructed models into a structured JSON file format or reload existing JSON models.
+- **Supported Element Types**:
+  - `Inflow` (1 output, upside-down triangle symbol)
+  - `Level` (1 input, rectangle/square symbol)
+  - `Reservoir` (1 inflow, 1 outflow, diamond symbol)
+  - `Node` (junction point, circle symbol)
+  - `Branch` (thick line connecting upstream element to downstream element)
+- **Map Interaction**: Place elements on canvas and connect them with `Branch` lines (including topological validation).
+- **QGIS Memory Layers**: Vector layers (`RTC-Tools Elements` and `RTC-Tools Branches`) with custom symbology and labels.
+- **Property Management**: Edit properties, names, and custom key-value metadata.
+- **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 
 ## Plugin Structure
 
@@ -16,8 +22,8 @@ RTC-Tools-QGIS-Plugin/
 ├── metadata.txt         # QGIS plugin metadata specification
 ├── __init__.py          # Plugin entry point (classFactory)
 ├── plugin.py            # Main plugin controller class (RTCToolsPlugin)
-├── model_manager.py     # Layer management, element data, and JSON export/import
-├── map_tool.py          # Custom QgsMapTool for canvas point selection
+├── model_manager.py     # Layer management, element data, topological validation, JSON export/import
+├── map_tool.py          # Custom QgsMapTool for canvas point selection and line branch creation
 ├── dock_widget.py       # RTCToolsDockWidget UI panel
 ├── element_dialog.py    # Element properties editor dialog
 ├── icon.png             # Plugin toolbar icon
@@ -33,19 +39,37 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
   "model_type": "RTC-Tools Model",
   "version": "1.0",
   "crs": "EPSG:4326",
-  "element_count": 1,
+  "element_count": 3,
   "elements": [
     {
-      "id": "node_1",
-      "name": "Node 1",
-      "type": "Node",
+      "id": "inflow_1",
+      "name": "Inflow 1",
+      "type": "Inflow",
       "location": {
         "x": 4.8951,
         "y": 52.3702
       },
-      "properties": {
-        "description": "Initial control point"
-      }
+      "properties": {}
+    },
+    {
+      "id": "level_1",
+      "name": "Level 1",
+      "type": "Level",
+      "location": {
+        "x": 4.9123,
+        "y": 52.3811
+      },
+      "properties": {}
+    },
+    {
+      "id": "branch_1",
+      "name": "Branch 1",
+      "type": "Branch",
+      "from_element": "inflow_1",
+      "to_element": "level_1",
+      "upstream": "inflow_1",
+      "downstream": "level_1",
+      "properties": {}
     }
   ]
 }
@@ -65,8 +89,7 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
 ## Usage
 
 1. Open the **RTC-Tools Model Builder** dock panel.
-2. Select the **Element Type** (e.g. `Node`).
-3. Click **📍 Add Element on Map**.
-4. Click anywhere on the QGIS map canvas to place elements.
-5. Select elements in the panel table to edit properties, delete, or clear all.
-6. Click **💾 Save Model to JSON...** to export the model to a text JSON file.
+2. Choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
+3. Click **📍 Add Element on Map** and click canvas to place elements.
+4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
+5. Edit, delete, or export your model to JSON via **💾 Save Model to JSON...**.

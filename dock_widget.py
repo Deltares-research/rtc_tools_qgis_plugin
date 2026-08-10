@@ -29,8 +29,8 @@ class RTCToolsDockWidget(QDockWidget):
         self.map_tool = map_tool
         self.setObjectName("RTCToolsDockWidget")
 
-        # Element types supported (extensible)
-        self.AVAILABLE_ELEMENT_TYPES = ["Node"]
+        # Element types supported
+        self.AVAILABLE_ELEMENT_TYPES = ["Node", "Inflow", "Level", "Reservoir", "Branch"]
 
         self._init_ui()
         self._connect_signals()
@@ -55,6 +55,7 @@ class RTCToolsDockWidget(QDockWidget):
         self.combo_element_type = QComboBox()
         for et in self.AVAILABLE_ELEMENT_TYPES:
             self.combo_element_type.addItem(et)
+        self.combo_element_type.currentTextChanged.connect(self._on_type_changed)
         h_layout_type.addWidget(self.combo_element_type)
         layout_placement.addLayout(h_layout_type)
 
@@ -70,7 +71,7 @@ class RTCToolsDockWidget(QDockWidget):
         layout_table = QVBoxLayout(grp_table)
 
         self.table_elements = QTableWidget(0, 5)
-        self.table_elements.setHorizontalHeaderLabels(["ID", "Name", "Type", "X", "Y"])
+        self.table_elements.setHorizontalHeaderLabels(["ID", "Name", "Type", "X / Upstream", "Y / Downstream"])
         self.table_elements.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_elements.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_elements.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -126,22 +127,34 @@ class RTCToolsDockWidget(QDockWidget):
     def get_selected_element_type(self):
         return self.combo_element_type.currentText()
 
+    def _on_type_changed(self, text):
+        if not self.btn_add_element.isChecked():
+            if text == "Branch":
+                self.btn_add_element.setText("🔗 Connect Elements with Branch")
+            else:
+                self.btn_add_element.setText("📍 Add Element on Map")
+
     def _toggle_map_tool(self, checked):
         if checked:
             self.iface.mapCanvas().setMapTool(self.map_tool)
             self.btn_add_element.setText("❌ Cancel Map Tool")
         else:
             self.iface.mapCanvas().unsetMapTool(self.map_tool)
-            self.btn_add_element.setText("📍 Add Element on Map")
+            self._on_type_changed(self.get_selected_element_type())
 
     def _on_element_placed(self, elem_data):
+        elem_type = elem_data.get("type")
+        if elem_type == "Branch":
+            msg = f"Added Branch '{elem_data.get('name')}' ({elem_data.get('from_element')} → {elem_data.get('to_element')})"
+        else:
+            msg = f"Added {elem_type} '{elem_data.get('name')}' ({elem_data.get('id')})"
+
         self.iface.messageBar().pushMessage(
             "RTC-Tools",
-            f"Added {elem_data.get('type')} '{elem_data.get('name')}' ({elem_data.get('id')})",
+            msg,
             level=Qgis.MessageLevel.Success,
             duration=3
         )
-        # Keep map tool active for continuous element addition or uncheck if desired
 
     def _on_element_changed(self, *args):
         self.refresh_table()
@@ -155,15 +168,20 @@ class RTCToolsDockWidget(QDockWidget):
             row = self.table_elements.rowCount()
             self.table_elements.insertRow(row)
 
-            loc = elem.get("location", {})
-            x_str = f"{loc.get('x', 0.0):.4f}"
-            y_str = f"{loc.get('y', 0.0):.4f}"
+            elem_type = elem.get("type", "")
+            if elem_type == "Branch":
+                col3_str = str(elem.get("from_element", ""))
+                col4_str = str(elem.get("to_element", ""))
+            else:
+                loc = elem.get("location", {})
+                col3_str = f"{loc.get('x', 0.0):.4f}"
+                col4_str = f"{loc.get('y', 0.0):.4f}"
 
             self.table_elements.setItem(row, 0, QTableWidgetItem(str(elem.get("id", ""))))
             self.table_elements.setItem(row, 1, QTableWidgetItem(str(elem.get("name", ""))))
-            self.table_elements.setItem(row, 2, QTableWidgetItem(str(elem.get("type", ""))))
-            self.table_elements.setItem(row, 3, QTableWidgetItem(x_str))
-            self.table_elements.setItem(row, 4, QTableWidgetItem(y_str))
+            self.table_elements.setItem(row, 2, QTableWidgetItem(str(elem_type)))
+            self.table_elements.setItem(row, 3, QTableWidgetItem(col3_str))
+            self.table_elements.setItem(row, 4, QTableWidgetItem(col4_str))
 
     def _get_selected_element_id(self):
         selected_rows = self.table_elements.selectionModel().selectedRows()

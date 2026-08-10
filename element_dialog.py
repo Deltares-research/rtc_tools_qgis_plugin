@@ -12,20 +12,19 @@ from qgis.PyQt.QtWidgets import (
     QDialogButtonBox,
     QLabel,
     QHeaderView,
-    QMessageBox,
 )
 from qgis.PyQt.QtCore import Qt
 
 class ElementDialog(QDialog):
-    """Dialog for editing properties of an RTC-Tools element."""
+    """Dialog for editing properties of an RTC-Tools element or Branch connection."""
 
     def __init__(self, element_data, element_types=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edit RTC-Tools Element")
-        self.resize(450, 400)
+        self.resize(450, 420)
 
         self.element_data = element_data
-        self.element_types = element_types or ["Node"]
+        self.element_types = element_types or ["Node", "Inflow", "Level", "Reservoir", "Branch"]
 
         self._init_ui()
         self._load_data()
@@ -33,7 +32,6 @@ class ElementDialog(QDialog):
     def _init_ui(self):
         layout = QVBoxLayout(self)
 
-        # Basic Info Form
         form = QFormLayout()
 
         self.txt_id = QLineEdit()
@@ -50,11 +48,22 @@ class ElementDialog(QDialog):
         self.txt_y = QLineEdit()
         self.txt_y.setReadOnly(True)
 
+        self.txt_from = QLineEdit()
+        self.txt_from.setReadOnly(True)
+        self.txt_to = QLineEdit()
+        self.txt_to.setReadOnly(True)
+
         form.addRow("ID:", self.txt_id)
         form.addRow("Name:", self.txt_name)
         form.addRow("Type:", self.combo_type)
-        form.addRow("X Coordinate:", self.txt_x)
-        form.addRow("Y Coordinate:", self.txt_y)
+
+        is_branch = self.element_data.get("type") == "Branch"
+        if is_branch:
+            form.addRow("Upstream (From):", self.txt_from)
+            form.addRow("Downstream (To):", self.txt_to)
+        else:
+            form.addRow("X Coordinate:", self.txt_x)
+            form.addRow("Y Coordinate:", self.txt_y)
 
         layout.addLayout(form)
 
@@ -95,9 +104,15 @@ class ElementDialog(QDialog):
             self.combo_type.addItem(elem_type)
             self.combo_type.setCurrentText(elem_type)
 
-        loc = self.element_data.get("location", {})
-        self.txt_x.setText(str(loc.get("x", 0.0)))
-        self.txt_y.setText(str(loc.get("y", 0.0)))
+        if elem_type == "Branch":
+            from_id = self.element_data.get("from_element") or self.element_data.get("upstream", "")
+            to_id = self.element_data.get("to_element") or self.element_data.get("downstream", "")
+            self.txt_from.setText(str(from_id))
+            self.txt_to.setText(str(to_id))
+        else:
+            loc = self.element_data.get("location", {})
+            self.txt_x.setText(str(loc.get("x", 0.0)))
+            self.txt_y.setText(str(loc.get("y", 0.0)))
 
         # Load properties table
         props = self.element_data.get("properties", {})

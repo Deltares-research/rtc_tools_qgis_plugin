@@ -39,6 +39,7 @@ class RTCToolsPlugin:
         self.map_tool = AddElementMapTool(
             self.iface.mapCanvas(),
             self.model_manager,
+            iface=self.iface,
             element_type_callback=self._get_active_element_type
         )
 
