@@ -1,0 +1,12 @@
+[general]
+name=RTC-Tools QGIS Plugin
+qgisMinimumVersion=3.0
+description=A QGIS plugin for constructing and exporting RTC-Tools models
+version=0.1.0
+author=RTC-Tools Developer
+email=info@rtc-tools.org
+about=A QGIS plugin to visually place RTC-Tools model elements on the map canvas, manage their properties, and export the constructed model to JSON format.
+tracker=https://github.com/
+repository=https://github.com/
+hasProcessingProvider=no
+plugin_type=normal
