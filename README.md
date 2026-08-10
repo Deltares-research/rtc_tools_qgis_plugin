@@ -12,6 +12,12 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - `Branch` (thick line connecting upstream element to downstream element)
 - **Map Interaction**: Place elements on canvas and connect them with `Branch` lines (including topological validation).
 - **QGIS Memory Layers**: Vector layers (`RTC-Tools Elements` and `RTC-Tools Branches`) with custom symbology and labels.
+- **Model Validation**: Check model topology against RTC-Tools connectivity rules:
+  - `Inflow`: Exactly 1 output (0 inputs)
+  - `Level`: Exactly 1 input (0 outputs)
+  - `Reservoir`: Exactly 1 input and 1 output
+  - `Node`: At least 1 input and exactly 1 output
+  - `Branch`: Valid upstream and downstream connections
 - **Property Management**: Edit properties, names, and custom key-value metadata.
 - **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 
@@ -92,4 +98,5 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
 2. Choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
 3. Click **📍 Add Element on Map** and click canvas to place elements.
 4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
-5. Edit, delete, or export your model to JSON via **💾 Save Model to JSON...**.
+5. Click **🔍 Validate Model** to verify all input/output constraints.
+6. Edit, delete, or export your model to JSON via **💾 Save Model to JSON...**.

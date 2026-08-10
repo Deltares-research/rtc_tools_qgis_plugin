@@ -348,6 +348,83 @@ class ModelManager(QObject):
 
         return True, ""
 
+    def validate_model(self):
+        """Validates the constructed model topology and element connection constraints.
+
+        Returns:
+            tuple: (is_valid: bool, issues: list[str])
+        """
+        issues = []
+        points = self.get_point_elements()
+        branches = self.get_branch_elements()
+
+        if not points:
+            return False, ["Model contains no point elements."]
+
+        point_ids = {p["id"]: p for p in points}
+
+        # Count inputs and outputs for each point element
+        in_counts = {pid: 0 for pid in point_ids}
+        out_counts = {pid: 0 for pid in point_ids}
+
+        # 1. Validate branches (each branch must connect valid upstream and downstream elements)
+        for b in branches:
+            bid = b.get("id")
+            bname = b.get("name", bid)
+            from_id = b.get("from_element") or b.get("upstream")
+            to_id = b.get("to_element") or b.get("downstream")
+
+            if not from_id or not to_id:
+                issues.append(f"Branch '{bname}' ({bid}) must have both an upstream and a downstream element.")
+                continue
+
+            if from_id not in point_ids:
+                issues.append(f"Branch '{bname}' ({bid}) has invalid upstream element '{from_id}'.")
+            else:
+                out_counts[from_id] += 1
+
+            if to_id not in point_ids:
+                issues.append(f"Branch '{bname}' ({bid}) has invalid downstream element '{to_id}'.")
+            else:
+                in_counts[to_id] += 1
+
+            if from_id == to_id and from_id in point_ids:
+                issues.append(f"Branch '{bname}' ({bid}) connects element '{from_id}' to itself.")
+
+        # 2. Validate point element input/output constraints
+        for pid, p in point_ids.items():
+            ptype = p.get("type")
+            pname = p.get("name", pid)
+            inputs = in_counts[pid]
+            outputs = out_counts[pid]
+
+            if ptype == "Inflow":
+                if inputs > 0:
+                    issues.append(f"Inflow '{pname}' ({pid}) cannot have inputs (found {inputs}).")
+                if outputs != 1:
+                    issues.append(f"Inflow '{pname}' ({pid}) must have exactly 1 output (found {outputs}).")
+
+            elif ptype == "Level":
+                if outputs > 0:
+                    issues.append(f"Level '{pname}' ({pid}) cannot have outputs (found {outputs}).")
+                if inputs != 1:
+                    issues.append(f"Level '{pname}' ({pid}) must have exactly 1 input (found {inputs}).")
+
+            elif ptype == "Reservoir":
+                if inputs != 1:
+                    issues.append(f"Reservoir '{pname}' ({pid}) must have exactly 1 input (found {inputs}).")
+                if outputs != 1:
+                    issues.append(f"Reservoir '{pname}' ({pid}) must have exactly 1 output (found {outputs}).")
+
+            elif ptype == "Node":
+                if inputs < 1:
+                    issues.append(f"Node '{pname}' ({pid}) must have at least 1 input (found {inputs}).")
+                if outputs != 1:
+                    issues.append(f"Node '{pname}' ({pid}) must have exactly 1 output (found {outputs}).")
+
+        is_valid = len(issues) == 0
+        return is_valid, issues
+
     def find_nearest_element(self, point, max_distance=None):
         """Finds the nearest point element feature to a canvas click location."""
         if not self.nodes_layer:

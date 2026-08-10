@@ -100,6 +100,11 @@ class RTCToolsDockWidget(QDockWidget):
         grp_export = QGroupBox("Model File")
         layout_export = QVBoxLayout(grp_export)
 
+        self.btn_validate = QPushButton("🔍 Validate Model")
+        self.btn_validate.setStyleSheet("padding: 5px;")
+        self.btn_validate.clicked.connect(self._validate_model)
+        layout_export.addWidget(self.btn_validate)
+
         self.btn_export = QPushButton("💾 Save Model to JSON...")
         self.btn_export.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_export.clicked.connect(self._export_model)
@@ -239,11 +244,50 @@ class RTCToolsDockWidget(QDockWidget):
         if reply == QMessageBox.Yes:
             self.model_manager.clear_all()
 
+    def _validate_model(self):
+        """Validates element connections and topology, showing a detailed message dialog."""
+        is_valid, issues = self.model_manager.validate_model()
+
+        if is_valid:
+            QMessageBox.information(
+                self,
+                "Model Validation Passed",
+                "✅ <b>Model Validation Successful!</b><br><br>"
+                "All elements and branch connections meet the RTC-Tools topology requirements."
+            )
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                "Model validation passed successfully!",
+                level=Qgis.MessageLevel.Success,
+                duration=4
+            )
+        else:
+            issue_items = "".join([f"<li>{issue}</li>" for issue in issues])
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("Model Validation Failed")
+            msg_box.setText("⚠️ <b>Model validation found the following issues:</b>")
+            msg_box.setInformativeText(f"<ul>{issue_items}</ul>")
+            msg_box.exec_()
+
     def _export_model(self):
         elements = self.model_manager.get_all_elements()
         if not elements:
             QMessageBox.warning(self, "RTC-Tools", "No elements in the model to export.")
             return
+
+        # Perform validation check prior to export
+        is_valid, issues = self.model_manager.validate_model()
+        if not is_valid:
+            issue_text = "\n".join([f"• {issue}" for issue in issues])
+            reply = QMessageBox.question(
+                self,
+                "Validation Warnings Detected",
+                f"The model has the following validation issues:\n\n{issue_text}\n\nDo you still want to export to JSON?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
