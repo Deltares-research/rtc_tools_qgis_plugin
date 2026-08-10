@@ -802,6 +802,12 @@ class ModelManager(QObject):
         term_lines = []
         branch_lines = []
 
+        # Inputs and Outputs sections
+        input_inflow_lines = []
+        input_opt_lines = []
+        output_lines = []
+        assign_lines = []
+
         for p in points:
             pid = p["id"]
             ptype = p.get("type")
@@ -823,15 +829,37 @@ class ModelManager(QObject):
                     f"  Deltares.ChannelFlow.SimpleRouting.Reservoir.Reservoir {var_name}(V(min = {min_val}, max = {max_val}, nominal = {nom_val}), n_QForcing = 0);"
                 )
 
+                # Decision / Optimization variables for Reservoir
+                input_opt_lines.append(f"  input SI.VolumeFlowRate {var_name}_Q_turbine(fixed = false);")
+                input_opt_lines.append(f"  input SI.VolumeFlowRate {var_name}_Q_spill(fixed = false);")
+
+                # Reservoir outputs
+                output_lines.append(f"  output SI.Volume {var_name}_V;")
+                output_lines.append(f"  output SI.VolumeFlowRate {var_name}_Q_out;")
+
+                # Reservoir assignment equations
+                assign_lines.append(f"  {var_name}.Q_turbine = {var_name}_Q_turbine;")
+                assign_lines.append(f"  {var_name}.Q_spill = {var_name}_Q_spill;")
+                assign_lines.append(f"  {var_name}_V = {var_name}.V;")
+                assign_lines.append(f"  {var_name}_Q_out = {var_name}.QOut.Q;")
+
             elif ptype == "Inflow":
                 inflow_lines.append(
                     f"  Deltares.ChannelFlow.SimpleRouting.BoundaryConditions.Inflow {var_name};"
                 )
 
+                # Inflow external input
+                input_inflow_lines.append(f"  input SI.VolumeFlowRate {var_name}_Inflow(fixed = true);")
+                assign_lines.append(f"  {var_name}.Q = {var_name}_Inflow;")
+
             elif ptype in ["Terminal", "Level"]:
                 term_lines.append(
                     f"  Deltares.ChannelFlow.SimpleRouting.BoundaryConditions.Terminal {var_name};"
                 )
+
+                # Terminal / Level output
+                output_lines.append(f"  output SI.VolumeFlowRate {var_name}_Q;")
+                assign_lines.append(f"  {var_name}_Q = {var_name}.Q;")
 
         for b in branches:
             var_name = id_to_var[b["id"]]
@@ -889,9 +917,22 @@ class ModelManager(QObject):
         if inflow_lines:
             mo_blocks.append("  // Inflows\n" + "\n".join(inflow_lines) + "\n")
         if term_lines:
-            mo_blocks.append("  // Terminals\n" + "\n".join(term_lines) + "\n")
+            mo_blocks.append("  // Terminals / Levels\n" + "\n".join(term_lines) + "\n")
         if branch_lines:
             mo_blocks.append("  // Branches\n" + "\n".join(branch_lines) + "\n")
+
+        if input_inflow_lines or input_opt_lines:
+            mo_blocks.append("  // Inputs")
+            if input_inflow_lines:
+                mo_blocks.append("  //// Inflows")
+                mo_blocks.append("\n".join(input_inflow_lines))
+            if input_opt_lines:
+                mo_blocks.append("  //// Optimization / Decision Variables")
+                mo_blocks.append("\n".join(input_opt_lines))
+            mo_blocks.append("")
+
+        if output_lines:
+            mo_blocks.append("  // Outputs\n" + "\n".join(output_lines) + "\n")
 
         mo_blocks.append("equation")
         mo_blocks.append("  // Connections")
@@ -899,6 +940,10 @@ class ModelManager(QObject):
             mo_blocks.append("\n".join(conn_lines))
         else:
             mo_blocks.append("  // (No connections)")
+
+        if assign_lines:
+            mo_blocks.append("\n  // Variable Assignments")
+            mo_blocks.append("\n".join(assign_lines))
 
         mo_blocks.append(f"\nend {model_name};\n")
 
