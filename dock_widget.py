@@ -18,6 +18,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.core import Qgis
 
 from .element_dialog import ElementDialog
+from .goal_table_dialog import GoalTableDialog
 
 class RTCToolsDockWidget(QDockWidget):
     """Dockable panel for RTC-Tools model building and JSON export."""
@@ -96,7 +97,27 @@ class RTCToolsDockWidget(QDockWidget):
 
         layout.addWidget(grp_table)
 
-        # --- 3. Save / Export Group ---
+        # --- 3. Optimization Goals Group ---
+        grp_goals = QGroupBox("Optimization Goals")
+        layout_goals = QVBoxLayout(grp_goals)
+
+        self.btn_edit_goals = QPushButton("🎯 Edit Goal Table...")
+        self.btn_edit_goals.setStyleSheet("padding: 5px;")
+        self.btn_edit_goals.clicked.connect(self._edit_goal_table)
+        layout_goals.addWidget(self.btn_edit_goals)
+
+        h_layout_goals_csv = QHBoxLayout()
+        self.btn_export_goals_csv = QPushButton("📊 Export CSV...")
+        self.btn_export_goals_csv.clicked.connect(self._export_goals_csv)
+        self.btn_import_goals_csv = QPushButton("📂 Import CSV...")
+        self.btn_import_goals_csv.clicked.connect(self._import_goals_csv)
+        h_layout_goals_csv.addWidget(self.btn_export_goals_csv)
+        h_layout_goals_csv.addWidget(self.btn_import_goals_csv)
+        layout_goals.addLayout(h_layout_goals_csv)
+
+        layout.addWidget(grp_goals)
+
+        # --- 4. Save / Export Group ---
         grp_export = QGroupBox("Model File")
         layout_export = QVBoxLayout(grp_export)
 
@@ -367,6 +388,57 @@ class RTCToolsDockWidget(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Modelica file constructed successfully at '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _edit_goal_table(self):
+        """Opens the Goal Table Editor dialog."""
+        current_goals = self.model_manager.get_goals()
+        dlg = GoalTableDialog(goals=current_goals, model_manager=self.model_manager, parent=self)
+        if dlg.exec_() == GoalTableDialog.Accepted:
+            updated_goals = dlg.get_updated_goals()
+            self.model_manager.set_goals(updated_goals)
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                f"Goal table updated ({len(updated_goals)} goals configured)",
+                level=Qgis.MessageLevel.Success,
+                duration=3
+            )
+
+    def _export_goals_csv(self):
+        """Exports the goal table to a CSV file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Goal Table CSV",
+            os.path.expanduser("~/goal_table.csv"),
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if file_path:
+            if not file_path.lower().endswith(".csv"):
+                file_path += ".csv"
+
+            if self.model_manager.export_goals_to_csv(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Goal table exported successfully to '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _import_goals_csv(self):
+        """Imports the goal table from a CSV file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Goal Table CSV",
+            os.path.expanduser("~"),
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if file_path:
+            if self.model_manager.import_goals_from_csv(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Imported {len(self.model_manager.get_goals())} goals from '{file_path}'",
                     level=Qgis.MessageLevel.Success,
                     duration=5
                 )

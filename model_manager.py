@@ -37,6 +37,7 @@ class ModelManager(QObject):
         self.iface = iface
         self.nodes_layer = None
         self.branches_layer = None
+        self.goals = []
         self._element_counter = 0
 
     def get_canvas_crs(self):
@@ -665,11 +666,80 @@ class ModelManager(QObject):
                 self.branches_layer.dataProvider().deleteFeatures(fids)
                 self.branches_layer.triggerRepaint()
 
+        self.goals = []
         self._element_counter = 0
         self.modelCleared.emit()
 
+    def get_goals(self):
+        """Returns list of goal dictionaries."""
+        return self.goals
+
+    def set_goals(self, goals):
+        """Sets list of goal dictionaries."""
+        self.goals = [dict(g) for g in (goals or [])]
+
+    def get_suggested_state_variables(self):
+        """Returns list of suggested Modelica state variable names derived from point elements."""
+        import re
+
+        def sanitize_identifier(raw_name):
+            s = re.sub(r'[\s\-]+', '_', str(raw_name).strip())
+            s = re.sub(r'[^\w]', '', s)
+            if s and s[0].isdigit():
+                s = f"elem_{s}"
+            return s or "elem"
+
+        states = []
+        for p in self.get_point_elements():
+            pname = p.get("name") or p.get("id")
+            vname = sanitize_identifier(pname)
+            ptype = p.get("type")
+
+            if ptype == "Reservoir":
+                states.extend([f"{vname}_V", f"{vname}_Q_out", f"{vname}_Q_turbine", f"{vname}_Q_spill"])
+            elif ptype in ["Terminal", "Level"]:
+                states.append(f"{vname}_Q")
+            elif ptype == "Inflow":
+                states.append(f"{vname}_Inflow")
+            elif ptype == "Node":
+                states.extend([f"{vname}_Qout", f"{vname}_Qin1"])
+
+        return list(dict.fromkeys(states))
+
+    def export_goals_to_csv(self, file_path):
+        """Exports goals table to a CSV file."""
+        import csv
+        fieldnames = [
+            "id", "state", "active", "goal_type", "function_min", "function_max",
+            "function_nominal", "target_data_type", "target_min", "target_max",
+            "priority", "weight", "order", "Description"
+        ]
+        with open(file_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for g in self.goals:
+                writer.writerow(g)
+        return True
+
+    def import_goals_from_csv(self, file_path):
+        """Imports goals table from a CSV file."""
+        import csv
+        fieldnames = [
+            "id", "state", "active", "goal_type", "function_min", "function_max",
+            "function_nominal", "target_data_type", "target_min", "target_max",
+            "priority", "weight", "order", "Description"
+        ]
+        imported = []
+        with open(file_path, "r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                goal = {col: row.get(col, "") for col in fieldnames}
+                imported.append(goal)
+        self.goals = imported
+        return True
+
     def export_to_json(self, file_path):
-        """Exports point elements and branch connections to a JSON file."""
+        """Exports point elements, branch connections, and goal table to a JSON file."""
         crs_str = self.nodes_layer.crs().authid() if self.nodes_layer else self.get_canvas_crs()
         elements = self.get_all_elements()
 
@@ -678,7 +748,8 @@ class ModelManager(QObject):
             "version": "1.0",
             "crs": crs_str,
             "element_count": len(elements),
-            "elements": elements
+            "elements": elements,
+            "goals": self.goals
         }
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -687,7 +758,7 @@ class ModelManager(QObject):
         return True
 
     def import_from_json(self, file_path):
-        """Imports point elements and branch connections from a JSON file."""
+        """Imports point elements, branch connections, and goal table from a JSON file."""
         if not os.path.exists(file_path):
             return False
 
@@ -696,6 +767,7 @@ class ModelManager(QObject):
 
         elements = data.get("elements", [])
         self.clear_all()
+        self.goals = data.get("goals", [])
 
         point_elems = [e for e in elements if e.get("type") != "Branch"]
         branch_elems = [e for e in elements if e.get("type") == "Branch"]

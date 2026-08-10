@@ -24,6 +24,11 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - `Reservoir`: Exactly 1 input and 1 output
   - `Node`: At least 1 input and exactly 1 output
   - `Branch`: Valid upstream and downstream connections
+- **Optimization Goal Table**:
+  - Interactive Goal Table editor supporting all RTC-Tools goal parameters (`id`, `state`, `active`, `goal_type`, `function_min`, `function_max`, `function_nominal`, `target_data_type`, `target_min`, `target_max`, `priority`, `weight`, `order`, `Description`)
+  - Auto-suggests state variable names from current model elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
+  - Export & Import goals to/from RTC-Tools standard CSV format (`goal_table.csv`)
+  - Full preservation of goal configuration inside exported and imported JSON model files
 - **Property Management**: Edit properties, names, and custom key-value metadata.
 - **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 
@@ -34,10 +39,11 @@ RTC-Tools-QGIS-Plugin/
 ├── metadata.txt         # QGIS plugin metadata specification
 ├── __init__.py          # Plugin entry point (classFactory)
 ├── plugin.py            # Main plugin controller class (RTCToolsPlugin)
-├── model_manager.py     # Layer management, element data, topological validation, JSON export/import
+├── model_manager.py     # Layer management, element data, topological validation, goal table, JSON export/import
 ├── map_tool.py          # Custom QgsMapTool for canvas point selection and line branch creation
 ├── dock_widget.py       # RTCToolsDockWidget UI panel
 ├── element_dialog.py    # Element properties editor dialog
+├── goal_table_dialog.py # Optimization Goal Table editor dialog
 ├── icon.png             # Plugin toolbar icon
 └── README.md            # Documentation
 ```
