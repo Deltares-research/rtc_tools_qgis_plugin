@@ -7,7 +7,7 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
 - **Supported Element Types**:
   - `Inflow` (1 output, upside-down triangle symbol)
   - `Level` (1 input, rectangle/square symbol)
-  - `Reservoir` (1 inflow, 1 outflow, diamond symbol)
+  - `Reservoir` (1 inflow, 1 outflow, diamond symbol; optional `Minimum`, `Maximum`, and `Nominal` parameters)
   - `Node` (junction point, circle symbol)
   - `Branch` (thick line connecting upstream element to downstream element)
 - **Map Interaction**: Place elements on canvas and connect them with `Branch` lines (including topological validation).

@@ -12,6 +12,7 @@ from qgis.PyQt.QtWidgets import (
     QDialogButtonBox,
     QLabel,
     QHeaderView,
+    QGroupBox,
 )
 from qgis.PyQt.QtCore import Qt
 
@@ -21,7 +22,7 @@ class ElementDialog(QDialog):
     def __init__(self, element_data, element_types=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edit RTC-Tools Element")
-        self.resize(450, 420)
+        self.resize(480, 500)
 
         self.element_data = element_data
         self.element_types = element_types or ["Node", "Inflow", "Level", "Reservoir", "Branch"]
@@ -42,6 +43,7 @@ class ElementDialog(QDialog):
         self.combo_type = QComboBox()
         for et in self.element_types:
             self.combo_type.addItem(et)
+        self.combo_type.currentTextChanged.connect(self._on_type_changed)
 
         self.txt_x = QLineEdit()
         self.txt_x.setReadOnly(True)
@@ -66,6 +68,23 @@ class ElementDialog(QDialog):
             form.addRow("Y Coordinate:", self.txt_y)
 
         layout.addLayout(form)
+
+        # Reservoir Specific Properties Group
+        self.grp_reservoir = QGroupBox("Reservoir Parameters (Optional)")
+        form_res = QFormLayout(self.grp_reservoir)
+
+        self.txt_min = QLineEdit()
+        self.txt_min.setPlaceholderText("e.g. 0.0")
+        self.txt_max = QLineEdit()
+        self.txt_max.setPlaceholderText("e.g. 1000.0")
+        self.txt_nominal = QLineEdit()
+        self.txt_nominal.setPlaceholderText("e.g. 500.0")
+
+        form_res.addRow("Minimum Value:", self.txt_min)
+        form_res.addRow("Maximum Value:", self.txt_max)
+        form_res.addRow("Nominal Value:", self.txt_nominal)
+
+        layout.addWidget(self.grp_reservoir)
 
         # Custom Properties Table
         layout.addWidget(QLabel("<b>Additional Properties:</b>"))
@@ -92,6 +111,12 @@ class ElementDialog(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
+    def _on_type_changed(self, text):
+        if text == "Reservoir":
+            self.grp_reservoir.show()
+        else:
+            self.grp_reservoir.hide()
+
     def _load_data(self):
         self.txt_id.setText(str(self.element_data.get("id", "")))
         self.txt_name.setText(str(self.element_data.get("name", "")))
@@ -104,6 +129,8 @@ class ElementDialog(QDialog):
             self.combo_type.addItem(elem_type)
             self.combo_type.setCurrentText(elem_type)
 
+        self._on_type_changed(elem_type)
+
         if elem_type == "Branch":
             from_id = self.element_data.get("from_element") or self.element_data.get("upstream", "")
             to_id = self.element_data.get("to_element") or self.element_data.get("downstream", "")
@@ -114,10 +141,26 @@ class ElementDialog(QDialog):
             self.txt_x.setText(str(loc.get("x", 0.0)))
             self.txt_y.setText(str(loc.get("y", 0.0)))
 
-        # Load properties table
-        props = self.element_data.get("properties", {})
+        # Load Reservoir properties if present
+        props = dict(self.element_data.get("properties", {}))
+
+        min_val = props.pop("Minimum", props.pop("minimum", ""))
+        max_val = props.pop("Maximum", props.pop("maximum", ""))
+        nom_val = props.pop("Nominal", props.pop("nominal", ""))
+
+        self.txt_min.setText(str(min_val) if min_val is not None else "")
+        self.txt_max.setText(str(max_val) if max_val is not None else "")
+        self.txt_nominal.setText(str(nom_val) if nom_val is not None else "")
+
+        # Load remaining custom properties table
         self.prop_table.setRowCount(0)
         for k, v in props.items():
+            row = self.prop_table.rowCount()
+            self.prop_table.insertRow(row)
+            self.prop_table.setItem(row, 0, QTableWidgetItem(str(k)))
+            self.prop_table.setItem(row, 1, QTableWidgetItem(str(v)))
+
+    def _add_prop_row(self):
             row = self.prop_table.rowCount()
             self.prop_table.insertRow(row)
             self.prop_table.setItem(row, 0, QTableWidgetItem(str(k)))
@@ -140,13 +183,38 @@ class ElementDialog(QDialog):
         elem_type = self.combo_type.currentText().strip()
 
         props = {}
+
+        # Add Reservoir specific properties if populated and type is Reservoir
+        if elem_type == "Reservoir":
+            min_val = self.txt_min.text().strip()
+            max_val = self.txt_max.text().strip()
+            nom_val = self.txt_nominal.text().strip()
+
+            if min_val:
+                try:
+                    props["Minimum"] = float(min_val) if "." in min_val else int(min_val)
+                except ValueError:
+                    props["Minimum"] = min_val
+
+            if max_val:
+                try:
+                    props["Maximum"] = float(max_val) if "." in max_val else int(max_val)
+                except ValueError:
+                    props["Maximum"] = max_val
+
+            if nom_val:
+                try:
+                    props["Nominal"] = float(nom_val) if "." in nom_val else int(nom_val)
+                except ValueError:
+                    props["Nominal"] = nom_val
+
         for row in range(self.prop_table.rowCount()):
             key_item = self.prop_table.item(row, 0)
             val_item = self.prop_table.item(row, 1)
             if key_item:
                 k = key_item.text().strip()
                 v = val_item.text().strip() if val_item else ""
-                if k:
+                if k and k not in ["Minimum", "Maximum", "Nominal"]:
                     props[k] = v
 
         return {
