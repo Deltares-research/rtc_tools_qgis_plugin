@@ -49,7 +49,6 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
   "element_count": 3,
   "elements": [
     {
-      "id": "inflow_1",
       "name": "Inflow 1",
       "type": "Inflow",
       "location": {
@@ -59,7 +58,6 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
       "properties": {}
     },
     {
-      "id": "level_1",
       "name": "Level 1",
       "type": "Level",
       "location": {
@@ -69,13 +67,12 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
       "properties": {}
     },
     {
-      "id": "branch_1",
       "name": "Branch 1",
       "type": "Branch",
-      "from_element": "inflow_1",
-      "to_element": "level_1",
-      "upstream": "inflow_1",
-      "downstream": "level_1",
+      "from_element": "Inflow 1",
+      "to_element": "Level 1",
+      "upstream": "Inflow 1",
+      "downstream": "Level 1",
       "properties": {}
     }
   ]

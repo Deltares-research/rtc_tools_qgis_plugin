@@ -35,9 +35,6 @@ class ElementDialog(QDialog):
 
         form = QFormLayout()
 
-        self.txt_id = QLineEdit()
-        self.txt_id.setReadOnly(True)
-
         self.txt_name = QLineEdit()
 
         self.combo_type = QComboBox()
@@ -55,7 +52,6 @@ class ElementDialog(QDialog):
         self.txt_to = QLineEdit()
         self.txt_to.setReadOnly(True)
 
-        form.addRow("ID:", self.txt_id)
         form.addRow("Name:", self.txt_name)
         form.addRow("Type:", self.combo_type)
 
@@ -118,7 +114,6 @@ class ElementDialog(QDialog):
             self.grp_reservoir.hide()
 
     def _load_data(self):
-        self.txt_id.setText(str(self.element_data.get("id", "")))
         self.txt_name.setText(str(self.element_data.get("name", "")))
 
         elem_type = str(self.element_data.get("type", "Node"))

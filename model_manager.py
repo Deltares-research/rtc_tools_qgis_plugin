@@ -209,42 +209,44 @@ class ModelManager(QObject):
         self.branches_layer.setLabelsEnabled(True)
 
     def _sync_counter(self):
-        """Synchronizes element ID counter from existing layers."""
+        """Synchronizes element counter from existing layers."""
         max_idx = 0
         layers = [self.nodes_layer, self.branches_layer]
         for lyr in layers:
             if not lyr:
                 continue
             for feat in lyr.getFeatures():
-                elem_id = str(feat.attribute("id") or "")
-                if "_" in elem_id:
+                elem_name = str(feat.attribute("name") or feat.attribute("id") or "")
+                parts = elem_name.split()
+                if len(parts) > 1:
                     try:
-                        num = int(elem_id.split("_")[-1])
+                        num = int(parts[-1])
                         if num > max_idx:
                             max_idx = num
                     except ValueError:
                         pass
         self._element_counter = max_idx
 
-    def generate_next_id(self, element_type="Node"):
-        """Generates a unique element ID."""
-        self._element_counter += 1
-        prefix = element_type.lower().replace(" ", "_")
-        return f"{prefix}_{self._element_counter}"
+    def generate_next_name(self, element_type="Node"):
+        """Generates a unique default element name (e.g. 'Node 1', 'Branch 1')."""
+        while True:
+            self._element_counter += 1
+            candidate = f"{element_type} {self._element_counter}"
+            if not self.get_element(candidate):
+                return candidate
 
     def add_element(self, point, element_type="Node", name=None, properties=None):
         """Adds a point element feature to the memory layer."""
         nodes_layer = self.get_or_create_nodes_layer()
 
-        elem_id = self.generate_next_id(element_type)
         if not name:
-            name = f"{element_type} {self._element_counter}"
+            name = self.generate_next_name(element_type)
         if properties is None:
             properties = {}
 
         feature = QgsFeature(nodes_layer.fields())
         feature.setGeometry(QgsGeometry.fromPointXY(point))
-        feature.setAttribute("id", elem_id)
+        feature.setAttribute("id", name)
         feature.setAttribute("name", name)
         feature.setAttribute("type", element_type)
         feature.setAttribute("properties", json.dumps(properties))
@@ -254,7 +256,7 @@ class ModelManager(QObject):
         nodes_layer.triggerRepaint()
 
         elem_data = {
-            "id": elem_id,
+            "id": name,
             "name": name,
             "type": element_type,
             "location": {"x": point.x(), "y": point.y()},
@@ -263,10 +265,10 @@ class ModelManager(QObject):
         self.elementAdded.emit(elem_data)
         return elem_data
 
-    def add_branch(self, from_element_id, to_element_id, name=None, properties=None):
+    def add_branch(self, from_element, to_element, name=None, properties=None):
         """Adds a line Branch connection between two point elements."""
-        from_elem = self.get_element(from_element_id)
-        to_elem = self.get_element(to_element_id)
+        from_elem = self.get_element(from_element)
+        to_elem = self.get_element(to_element)
 
         if not from_elem or not to_elem:
             return None
@@ -275,19 +277,21 @@ class ModelManager(QObject):
         pt_to = QgsPointXY(to_elem["location"]["x"], to_elem["location"]["y"])
 
         branches_layer = self.get_or_create_branches_layer()
-        branch_id = self.generate_next_id("Branch")
         if not name:
-            name = f"Branch {self._element_counter}"
+            name = self.generate_next_name("Branch")
         if properties is None:
             properties = {}
 
+        from_name = from_elem["name"]
+        to_name = to_elem["name"]
+
         feature = QgsFeature(branches_layer.fields())
         feature.setGeometry(QgsGeometry.fromPolylineXY([pt_from, pt_to]))
-        feature.setAttribute("id", branch_id)
+        feature.setAttribute("id", name)
         feature.setAttribute("name", name)
         feature.setAttribute("type", "Branch")
-        feature.setAttribute("from_element", from_element_id)
-        feature.setAttribute("to_element", to_element_id)
+        feature.setAttribute("from_element", from_name)
+        feature.setAttribute("to_element", to_name)
         feature.setAttribute("properties", json.dumps(properties))
 
         branches_layer.dataProvider().addFeatures([feature])
@@ -295,13 +299,13 @@ class ModelManager(QObject):
         branches_layer.triggerRepaint()
 
         branch_data = {
-            "id": branch_id,
+            "id": name,
             "name": name,
             "type": "Branch",
-            "from_element": from_element_id,
-            "to_element": to_element_id,
-            "upstream": from_element_id,
-            "downstream": to_element_id,
+            "from_element": from_name,
+            "to_element": to_name,
+            "upstream": from_name,
+            "downstream": to_name,
             "properties": properties
         }
         self.elementAdded.emit(branch_data)
@@ -460,16 +464,23 @@ class ModelManager(QObject):
         return nearest_elem
 
     def update_element(self, element_id, new_name=None, new_type=None, new_properties=None):
-        """Updates attributes of an existing point or branch element by ID."""
+        """Updates attributes of an existing point or branch element by name/ID."""
+        if new_name and new_name != element_id:
+            if self.get_element(new_name):
+                return False  # Name collision
+
+        target_name = new_name if new_name else element_id
+
         # 1. Check point elements layer
         if self.nodes_layer:
             for feat in self.nodes_layer.getFeatures():
-                if feat.attribute("id") == element_id:
+                if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
                     attr_updates = {}
                     fields = self.nodes_layer.fields()
 
                     if new_name is not None:
                         attr_updates[fields.indexFromName("name")] = new_name
+                        attr_updates[fields.indexFromName("id")] = new_name
                     if new_type is not None:
                         attr_updates[fields.indexFromName("type")] = new_type
                     if new_properties is not None:
@@ -479,7 +490,22 @@ class ModelManager(QObject):
                         self.nodes_layer.dataProvider().changeAttributeValues({feat.id(): attr_updates})
                         self.nodes_layer.triggerRepaint()
 
-                    updated_data = self.get_element(element_id)
+                    # Update branch connections referencing the old name
+                    if new_name and new_name != element_id and self.branches_layer:
+                        b_fields = self.branches_layer.fields()
+                        idx_from = b_fields.indexFromName("from_element")
+                        idx_to = b_fields.indexFromName("to_element")
+                        for b_feat in self.branches_layer.getFeatures():
+                            b_updates = {}
+                            if b_feat.attribute("from_element") == element_id:
+                                b_updates[idx_from] = new_name
+                            if b_feat.attribute("to_element") == element_id:
+                                b_updates[idx_to] = new_name
+                            if b_updates:
+                                self.branches_layer.dataProvider().changeAttributeValues({b_feat.id(): b_updates})
+                        self.branches_layer.triggerRepaint()
+
+                    updated_data = self.get_element(target_name)
                     if updated_data:
                         self.elementUpdated.emit(updated_data)
                     return True
@@ -487,12 +513,13 @@ class ModelManager(QObject):
         # 2. Check branch line layer
         if self.branches_layer:
             for feat in self.branches_layer.getFeatures():
-                if feat.attribute("id") == element_id:
+                if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
                     attr_updates = {}
                     fields = self.branches_layer.fields()
 
                     if new_name is not None:
                         attr_updates[fields.indexFromName("name")] = new_name
+                        attr_updates[fields.indexFromName("id")] = new_name
                     if new_type is not None:
                         attr_updates[fields.indexFromName("type")] = new_type
                     if new_properties is not None:
@@ -502,7 +529,7 @@ class ModelManager(QObject):
                         self.branches_layer.dataProvider().changeAttributeValues({feat.id(): attr_updates})
                         self.branches_layer.triggerRepaint()
 
-                    updated_data = self.get_element(element_id)
+                    updated_data = self.get_element(target_name)
                     if updated_data:
                         self.elementUpdated.emit(updated_data)
                     return True
@@ -510,11 +537,11 @@ class ModelManager(QObject):
         return False
 
     def remove_element(self, element_id):
-        """Deletes an element by ID, removing connected branches if a point element is removed."""
+        """Deletes an element by name, removing connected branches if a point element is removed."""
         # Check point nodes layer
         if self.nodes_layer:
             for feat in self.nodes_layer.getFeatures():
-                if feat.attribute("id") == element_id:
+                if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
                     self.nodes_layer.dataProvider().deleteFeatures([feat.id()])
                     self.nodes_layer.triggerRepaint()
                     self._remove_branches_connected_to(element_id)
@@ -524,7 +551,7 @@ class ModelManager(QObject):
         # Check branches layer
         if self.branches_layer:
             for feat in self.branches_layer.getFeatures():
-                if feat.attribute("id") == element_id:
+                if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
                     self.branches_layer.dataProvider().deleteFeatures([feat.id()])
                     self.branches_layer.triggerRepaint()
                     self.elementRemoved.emit(element_id)
@@ -547,15 +574,18 @@ class ModelManager(QObject):
             self.branches_layer.triggerRepaint()
 
     def get_element(self, element_id):
-        """Retrieves dictionary representation of an element or branch by ID."""
+        """Retrieves dictionary representation of an element or branch by name/ID."""
+        if not element_id:
+            return None
+
         if self.nodes_layer:
             for feat in self.nodes_layer.getFeatures():
-                if feat.attribute("id") == element_id:
+                if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
                     return self._node_feature_to_dict(feat)
 
         if self.branches_layer:
             for feat in self.branches_layer.getFeatures():
-                if feat.attribute("id") == element_id:
+                if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
                     return self._branch_feature_to_dict(feat)
 
         return None
@@ -586,9 +616,11 @@ class ModelManager(QObject):
         except (ValueError, TypeError):
             properties = {}
 
+        name = feat.attribute("name") or feat.attribute("id")
+
         return {
-            "id": feat.attribute("id"),
-            "name": feat.attribute("name"),
+            "id": name,
+            "name": name,
             "type": feat.attribute("type"),
             "location": {
                 "x": point.x(),
@@ -604,12 +636,13 @@ class ModelManager(QObject):
         except (ValueError, TypeError):
             properties = {}
 
+        name = feat.attribute("name") or feat.attribute("id")
         from_id = feat.attribute("from_element")
         to_id = feat.attribute("to_element")
 
         return {
-            "id": feat.attribute("id"),
-            "name": feat.attribute("name"),
+            "id": name,
+            "name": name,
             "type": "Branch",
             "from_element": from_id,
             "to_element": to_id,
@@ -672,15 +705,14 @@ class ModelManager(QObject):
             loc = elem.get("location", {})
             pt = QgsPointXY(loc.get("x", 0.0), loc.get("y", 0.0))
             elem_type = elem.get("type", "Node")
-            elem_id = elem.get("id")
-            name = elem.get("name")
+            name = elem.get("name") or elem.get("id") or self.generate_next_name(elem_type)
             properties = elem.get("properties", {})
 
             nodes_layer = self.get_or_create_nodes_layer()
             feature = QgsFeature(nodes_layer.fields())
             feature.setGeometry(QgsGeometry.fromPointXY(pt))
-            feature.setAttribute("id", elem_id or self.generate_next_id(elem_type))
-            feature.setAttribute("name", name or "Element")
+            feature.setAttribute("id", name)
+            feature.setAttribute("name", name)
             feature.setAttribute("type", elem_type)
             feature.setAttribute("properties", json.dumps(properties))
 
@@ -694,8 +726,7 @@ class ModelManager(QObject):
         for branch in branch_elems:
             from_id = branch.get("from_element") or branch.get("upstream")
             to_id = branch.get("to_element") or branch.get("downstream")
-            branch_id = branch.get("id")
-            name = branch.get("name")
+            name = branch.get("name") or branch.get("id") or self.generate_next_name("Branch")
             properties = branch.get("properties", {})
 
             from_elem = self.get_element(from_id)
@@ -708,11 +739,11 @@ class ModelManager(QObject):
                 branches_layer = self.get_or_create_branches_layer()
                 feature = QgsFeature(branches_layer.fields())
                 feature.setGeometry(QgsGeometry.fromPolylineXY([pt_from, pt_to]))
-                feature.setAttribute("id", branch_id or self.generate_next_id("Branch"))
-                feature.setAttribute("name", name or "Branch")
+                feature.setAttribute("id", name)
+                feature.setAttribute("name", name)
                 feature.setAttribute("type", "Branch")
-                feature.setAttribute("from_element", from_id)
-                feature.setAttribute("to_element", to_id)
+                feature.setAttribute("from_element", from_elem["name"])
+                feature.setAttribute("to_element", to_elem["name"])
                 feature.setAttribute("properties", json.dumps(properties))
 
                 branches_layer.dataProvider().addFeatures([feature])

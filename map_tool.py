@@ -55,7 +55,7 @@ class AddElementMapTool(QgsMapToolEmitPoint):
             if self.iface:
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
-                    f"Selected upstream element: '{nearest_elem['name']}' ({nearest_elem['id']}). Now click the downstream element.",
+                    f"Selected upstream element: '{nearest_elem['name']}'. Now click the downstream element.",
                     level=Qgis.MessageLevel.Info,
                     duration=5
                 )
@@ -67,10 +67,10 @@ class AddElementMapTool(QgsMapToolEmitPoint):
 
         else:
             # Second click: select downstream element
-            from_id = self.selected_from_element["id"]
-            to_id = nearest_elem["id"]
+            from_name = self.selected_from_element["name"]
+            to_name = nearest_elem["name"]
 
-            is_valid, err_msg = self.model_manager.validate_branch_connection(from_id, to_id)
+            is_valid, err_msg = self.model_manager.validate_branch_connection(from_name, to_name)
             if not is_valid:
                 if self.iface:
                     self.iface.messageBar().pushMessage(
@@ -82,7 +82,7 @@ class AddElementMapTool(QgsMapToolEmitPoint):
                 self._reset_branch_selection()
                 return
 
-            branch_data = self.model_manager.add_branch(from_id, to_id)
+            branch_data = self.model_manager.add_branch(from_name, to_name)
             self._reset_branch_selection()
 
             if branch_data:

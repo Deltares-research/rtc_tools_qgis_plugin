@@ -70,8 +70,8 @@ class RTCToolsDockWidget(QDockWidget):
         grp_table = QGroupBox("Model Elements")
         layout_table = QVBoxLayout(grp_table)
 
-        self.table_elements = QTableWidget(0, 5)
-        self.table_elements.setHorizontalHeaderLabels(["ID", "Name", "Type", "X / Upstream", "Y / Downstream"])
+        self.table_elements = QTableWidget(0, 4)
+        self.table_elements.setHorizontalHeaderLabels(["Name", "Type", "X / Upstream", "Y / Downstream"])
         self.table_elements.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_elements.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_elements.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -157,7 +157,7 @@ class RTCToolsDockWidget(QDockWidget):
         if elem_type == "Branch":
             msg = f"Added Branch '{elem_data.get('name')}' ({elem_data.get('from_element')} → {elem_data.get('to_element')})"
         else:
-            msg = f"Added {elem_type} '{elem_data.get('name')}' ({elem_data.get('id')})"
+            msg = f"Added {elem_type} '{elem_data.get('name')}'"
 
         self.iface.messageBar().pushMessage(
             "RTC-Tools",
@@ -180,20 +180,19 @@ class RTCToolsDockWidget(QDockWidget):
 
             elem_type = elem.get("type", "")
             if elem_type == "Branch":
-                col3_str = str(elem.get("from_element", ""))
-                col4_str = str(elem.get("to_element", ""))
+                col2_str = str(elem.get("from_element", ""))
+                col3_str = str(elem.get("to_element", ""))
             else:
                 loc = elem.get("location", {})
-                col3_str = f"{loc.get('x', 0.0):.4f}"
-                col4_str = f"{loc.get('y', 0.0):.4f}"
+                col2_str = f"{loc.get('x', 0.0):.4f}"
+                col3_str = f"{loc.get('y', 0.0):.4f}"
 
-            self.table_elements.setItem(row, 0, QTableWidgetItem(str(elem.get("id", ""))))
-            self.table_elements.setItem(row, 1, QTableWidgetItem(str(elem.get("name", ""))))
-            self.table_elements.setItem(row, 2, QTableWidgetItem(str(elem_type)))
+            self.table_elements.setItem(row, 0, QTableWidgetItem(str(elem.get("name", ""))))
+            self.table_elements.setItem(row, 1, QTableWidgetItem(str(elem_type)))
+            self.table_elements.setItem(row, 2, QTableWidgetItem(col2_str))
             self.table_elements.setItem(row, 3, QTableWidgetItem(col3_str))
-            self.table_elements.setItem(row, 4, QTableWidgetItem(col4_str))
 
-    def _get_selected_element_id(self):
+    def _get_selected_element_name(self):
         selected_rows = self.table_elements.selectionModel().selectedRows()
         if not selected_rows:
             return None
@@ -202,39 +201,41 @@ class RTCToolsDockWidget(QDockWidget):
         return item.text() if item else None
 
     def _edit_selected_element(self):
-        elem_id = self._get_selected_element_id()
-        if not elem_id:
+        elem_name = self._get_selected_element_name()
+        if not elem_name:
             QMessageBox.information(self, "RTC-Tools", "Please select an element from the table to edit.")
             return
 
-        elem_data = self.model_manager.get_element(elem_id)
+        elem_data = self.model_manager.get_element(elem_name)
         if not elem_data:
             return
 
         dlg = ElementDialog(elem_data, element_types=self.AVAILABLE_ELEMENT_TYPES, parent=self)
         if dlg.exec_() == ElementDialog.Accepted:
             updated = dlg.get_updated_data()
-            self.model_manager.update_element(
-                elem_id,
+            success = self.model_manager.update_element(
+                elem_name,
                 new_name=updated["name"],
                 new_type=updated["type"],
                 new_properties=updated["properties"]
             )
+            if not success:
+                QMessageBox.warning(self, "RTC-Tools", f"Could not update element. An element named '{updated['name']}' may already exist.")
 
     def _delete_selected_element(self):
-        elem_id = self._get_selected_element_id()
-        if not elem_id:
+        elem_name = self._get_selected_element_name()
+        if not elem_name:
             QMessageBox.information(self, "RTC-Tools", "Please select an element from the table to delete.")
             return
 
         reply = QMessageBox.question(
             self,
             "Delete Element",
-            f"Are you sure you want to delete element '{elem_id}'?",
+            f"Are you sure you want to delete element '{elem_name}'?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            self.model_manager.remove_element(elem_id)
+            self.model_manager.remove_element(elem_name)
 
     def _clear_all_elements(self):
         if not self.model_manager.get_all_elements():
