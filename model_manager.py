@@ -125,7 +125,7 @@ class ModelManager(QObject):
         })
         cat_inflow = QgsRendererCategory("Inflow", sym_inflow, "Inflow")
 
-        # 2. Level: Rectangle / square
+        # 2. Level / Terminal: Rectangle / square
         sym_level = QgsMarkerSymbol.createSimple({
             "name": "square",
             "color": "#27AE60",
@@ -134,6 +134,15 @@ class ModelManager(QObject):
             "size": "5.0"
         })
         cat_level = QgsRendererCategory("Level", sym_level, "Level")
+
+        sym_term = QgsMarkerSymbol.createSimple({
+            "name": "square",
+            "color": "#8E44AD",
+            "outline_color": "#FFFFFF",
+            "outline_width": "0.6",
+            "size": "5.0"
+        })
+        cat_term = QgsRendererCategory("Terminal", sym_term, "Terminal")
 
         # 3. Node: Circle
         sym_node = QgsMarkerSymbol.createSimple({
@@ -155,7 +164,7 @@ class ModelManager(QObject):
         })
         cat_res = QgsRendererCategory("Reservoir", sym_res, "Reservoir")
 
-        renderer = QgsCategorizedSymbolRenderer("type", [cat_inflow, cat_level, cat_node, cat_res])
+        renderer = QgsCategorizedSymbolRenderer("type", [cat_inflow, cat_level, cat_term, cat_node, cat_res])
         self.nodes_layer.setRenderer(renderer)
 
         # Labels displaying element name
@@ -312,9 +321,9 @@ class ModelManager(QObject):
         from_type = from_elem.get("type")
         to_type = to_elem.get("type")
 
-        # 1. Level element has no output (0 outputs)
-        if from_type == "Level":
-            return False, f"Level element '{from_elem['name']}' cannot have outgoing connections (has no output)."
+        # 1. Level / Terminal element has no output (0 outputs)
+        if from_type in ["Level", "Terminal"]:
+            return False, f"{from_type} element '{from_elem['name']}' cannot have outgoing connections (has no output)."
 
         # 2. Inflow element has no input (0 inputs)
         if to_type == "Inflow":
@@ -329,11 +338,11 @@ class ModelManager(QObject):
             if out_count >= 1:
                 return False, f"Inflow element '{from_elem['name']}' already has its maximum (1) output connection."
 
-        # Level max 1 input
-        if to_type == "Level":
+        # Level / Terminal max 1 input
+        if to_type in ["Level", "Terminal"]:
             in_count = sum(1 for b in branches if b.get("to_element") == to_element_id)
             if in_count >= 1:
-                return False, f"Level element '{to_elem['name']}' already has its maximum (1) input connection."
+                return False, f"{to_type} element '{to_elem['name']}' already has its maximum (1) input connection."
 
         # Reservoir max 1 inflow (input) and max 1 outflow (output)
         if from_type == "Reservoir":
@@ -404,11 +413,11 @@ class ModelManager(QObject):
                 if outputs != 1:
                     issues.append(f"Inflow '{pname}' ({pid}) must have exactly 1 output (found {outputs}).")
 
-            elif ptype == "Level":
+            elif ptype in ["Level", "Terminal"]:
                 if outputs > 0:
-                    issues.append(f"Level '{pname}' ({pid}) cannot have outputs (found {outputs}).")
+                    issues.append(f"{ptype} '{pname}' ({pid}) cannot have outputs (found {outputs}).")
                 if inputs != 1:
-                    issues.append(f"Level '{pname}' ({pid}) must have exactly 1 input (found {inputs}).")
+                    issues.append(f"{ptype} '{pname}' ({pid}) must have exactly 1 input (found {inputs}).")
 
             elif ptype == "Reservoir":
                 if inputs != 1:
@@ -714,4 +723,157 @@ class ModelManager(QObject):
 
         self._sync_counter()
         self.modelCleared.emit()
+        return True
+
+    def export_to_modelica(self, file_path, model_name=None):
+        """Constructs and exports a Modelica (*.mo) file compatible with RTC-Tools models."""
+        import re
+
+        def sanitize_identifier(raw_name):
+            s = re.sub(r'[\s\-]+', '_', str(raw_name).strip())
+            s = re.sub(r'[^\w]', '', s)
+            if s and s[0].isdigit():
+                s = f"elem_{s}"
+            return s or "elem"
+
+        if not model_name:
+            base_filename = os.path.splitext(os.path.basename(file_path))[0]
+            model_name = sanitize_identifier(base_filename)
+        else:
+            model_name = sanitize_identifier(model_name)
+
+        points = self.get_point_elements()
+        branches = self.get_branch_elements()
+
+        # Build unique Modelica identifiers map for elements
+        id_to_var = {}
+        used_vars = set()
+
+        for elem in points + branches:
+            raw_name = elem.get("name") or elem.get("id")
+            var_name = sanitize_identifier(raw_name)
+
+            base_var = var_name
+            counter = 1
+            while var_name in used_vars:
+                var_name = f"{base_var}_{counter}"
+                counter += 1
+
+            used_vars.add(var_name)
+            id_to_var[elem["id"]] = var_name
+
+        point_ids = {p["id"]: p for p in points}
+
+        # 1. Categorize declarations
+        node_lines = []
+        res_lines = []
+        inflow_lines = []
+        term_lines = []
+        branch_lines = []
+
+        for p in points:
+            pid = p["id"]
+            ptype = p.get("type")
+            var_name = id_to_var[pid]
+
+            if ptype == "Node":
+                nin = sum(1 for b in branches if (b.get("from_element") or b.get("upstream")) and (b.get("to_element") or b.get("downstream")) == pid)
+                node_lines.append(
+                    f"  Deltares.ChannelFlow.SimpleRouting.Nodes.Node {var_name}(nin = {nin}, nout = 1, n_QForcing = 0);"
+                )
+
+            elif ptype == "Reservoir":
+                props = p.get("properties", {})
+                min_val = props.get("Minimum", props.get("minimum", 0))
+                max_val = props.get("Maximum", props.get("maximum", 0))
+                nom_val = props.get("Nominal", props.get("nominal", 0))
+
+                res_lines.append(
+                    f"  Deltares.ChannelFlow.SimpleRouting.Reservoir.Reservoir {var_name}(V(min = {min_val}, max = {max_val}, nominal = {nom_val}), n_QForcing = 0);"
+                )
+
+            elif ptype == "Inflow":
+                inflow_lines.append(
+                    f"  Deltares.ChannelFlow.SimpleRouting.BoundaryConditions.Inflow {var_name};"
+                )
+
+            elif ptype in ["Terminal", "Level"]:
+                term_lines.append(
+                    f"  Deltares.ChannelFlow.SimpleRouting.BoundaryConditions.Terminal {var_name};"
+                )
+
+        for b in branches:
+            var_name = id_to_var[b["id"]]
+            branch_lines.append(
+                f"  Deltares.ChannelFlow.SimpleRouting.Branches.Steady {var_name};"
+            )
+
+        # 2. Build equation connect statements
+        conn_lines = []
+        node_in_counter = {pid: 0 for pid in point_ids if point_ids[pid].get("type") == "Node"}
+
+        for b in branches:
+            branch_var = id_to_var[b["id"]]
+            from_id = b.get("from_element") or b.get("upstream")
+            to_id = b.get("to_element") or b.get("downstream")
+
+            from_elem = point_ids.get(from_id)
+            to_elem = point_ids.get(to_id)
+
+            if not from_elem or not to_elem:
+                continue
+
+            from_var = id_to_var[from_id]
+            to_var = id_to_var[to_id]
+            from_type = from_elem.get("type")
+            to_type = to_elem.get("type")
+
+            # Determine upstream element output port
+            if from_type == "Node":
+                from_port = f"{from_var}.QOut[1]"
+            else:
+                from_port = f"{from_var}.QOut"
+
+            # Determine downstream element input port
+            if to_type == "Node":
+                node_in_counter[to_id] = node_in_counter.get(to_id, 0) + 1
+                in_idx = node_in_counter[to_id]
+                to_port = f"{to_var}.QIn[{in_idx}]"
+            else:
+                to_port = f"{to_var}.QIn"
+
+            conn_lines.append(f"  connect({from_port}, {branch_var}.QIn);")
+            conn_lines.append(f"  connect({branch_var}.QOut, {to_port});")
+
+        # 3. Assemble full Modelica code
+        mo_blocks = [
+            f"model {model_name}",
+            "  import SI = Modelica.Units.SI;\n"
+        ]
+
+        if node_lines:
+            mo_blocks.append("  // Nodes\n" + "\n".join(node_lines) + "\n")
+        if res_lines:
+            mo_blocks.append("  // Reservoirs\n" + "\n".join(res_lines) + "\n")
+        if inflow_lines:
+            mo_blocks.append("  // Inflows\n" + "\n".join(inflow_lines) + "\n")
+        if term_lines:
+            mo_blocks.append("  // Terminals\n" + "\n".join(term_lines) + "\n")
+        if branch_lines:
+            mo_blocks.append("  // Branches\n" + "\n".join(branch_lines) + "\n")
+
+        mo_blocks.append("equation")
+        mo_blocks.append("  // Connections")
+        if conn_lines:
+            mo_blocks.append("\n".join(conn_lines))
+        else:
+            mo_blocks.append("  // (No connections)")
+
+        mo_blocks.append(f"\nend {model_name};\n")
+
+        mo_content = "\n".join(mo_blocks)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(mo_content)
+
         return True

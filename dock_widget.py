@@ -30,7 +30,7 @@ class RTCToolsDockWidget(QDockWidget):
         self.setObjectName("RTCToolsDockWidget")
 
         # Element types supported
-        self.AVAILABLE_ELEMENT_TYPES = ["Node", "Inflow", "Level", "Reservoir", "Branch"]
+        self.AVAILABLE_ELEMENT_TYPES = ["Node", "Inflow", "Level", "Terminal", "Reservoir", "Branch"]
 
         self._init_ui()
         self._connect_signals()
@@ -113,6 +113,11 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_import = QPushButton("📂 Open Model from JSON...")
         self.btn_import.clicked.connect(self._import_model)
         layout_export.addWidget(self.btn_import)
+
+        self.btn_export_mo = QPushButton("⚙️ Construct Modelica File...")
+        self.btn_export_mo.setStyleSheet("font-weight: bold; padding: 6px;")
+        self.btn_export_mo.clicked.connect(self._export_modelica)
+        layout_export.addWidget(self.btn_export_mo)
 
         layout.addWidget(grp_export)
 
@@ -326,3 +331,41 @@ class RTCToolsDockWidget(QDockWidget):
                 )
             else:
                 QMessageBox.critical(self, "RTC-Tools", f"Failed to load model from '{file_path}'")
+
+    def _export_modelica(self):
+        """Constructs and exports a Modelica (*.mo) file."""
+        elements = self.model_manager.get_all_elements()
+        if not elements:
+            QMessageBox.warning(self, "RTC-Tools", "No elements in the model to export.")
+            return
+
+        is_valid, issues = self.model_manager.validate_model()
+        if not is_valid:
+            issue_text = "\n".join([f"• {issue}" for issue in issues])
+            reply = QMessageBox.question(
+                self,
+                "Validation Warnings Detected",
+                f"The model has the following validation issues:\n\n{issue_text}\n\nDo you still want to construct the Modelica file anyway?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Construct Modelica File",
+            os.path.expanduser("~/rtc_tools_model.mo"),
+            "Modelica Files (*.mo);;All Files (*)"
+        )
+
+        if file_path:
+            if not file_path.lower().endswith(".mo"):
+                file_path += ".mo"
+
+            if self.model_manager.export_to_modelica(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Modelica file constructed successfully at '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )

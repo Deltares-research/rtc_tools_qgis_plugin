@@ -25,7 +25,7 @@ class ElementDialog(QDialog):
         self.resize(480, 500)
 
         self.element_data = element_data
-        self.element_types = element_types or ["Node", "Inflow", "Level", "Reservoir", "Branch"]
+        self.element_types = element_types or ["Node", "Inflow", "Level", "Terminal", "Reservoir", "Branch"]
 
         self._init_ui()
         self._load_data()
