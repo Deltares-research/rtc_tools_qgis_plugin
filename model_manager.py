@@ -39,6 +39,7 @@ class ModelManager(QObject):
         self.branches_layer = None
         self.goals = []
         self.plots = []
+        self.rtc_data_config = []
         self._element_counter = 0
 
     def get_canvas_crs(self):
@@ -669,6 +670,7 @@ class ModelManager(QObject):
 
         self.goals = []
         self.plots = []
+        self.rtc_data_config = []
         self._element_counter = 0
         self.modelCleared.emit()
 
@@ -687,6 +689,14 @@ class ModelManager(QObject):
     def set_plots(self, plots):
         """Sets list of plot dictionaries."""
         self.plots = [dict(p) for p in (plots or [])]
+
+    def get_rtc_data_config(self):
+        """Returns list of rtcDataConfig timeSeries mapping dictionaries."""
+        return self.rtc_data_config
+
+    def set_rtc_data_config(self, mappings):
+        """Sets list of rtcDataConfig timeSeries mapping dictionaries."""
+        self.rtc_data_config = [dict(m) for m in (mappings or [])]
 
     def get_suggested_state_variables(self):
         """Returns list of suggested Modelica state variable names derived from point elements."""
@@ -781,8 +791,70 @@ class ModelManager(QObject):
         self.plots = imported
         return True
 
+    def export_rtc_data_config_to_xml(self, file_path):
+        """Exports rtcDataConfig timeSeries mappings to an XML file."""
+        import xml.etree.ElementTree as ET
+        from xml.dom import minidom
+
+        root = ET.Element("rtcDataConfig", {
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns:rtc": "http://www.wldelft.nl/fews",
+            "xmlns": "http://www.wldelft.nl/fews",
+            "xsi:schemaLocation": "http://www.wldelft.nl/fews ../xsd/rtcDataConfig.xsd"
+        })
+
+        for m in self.rtc_data_config:
+            ts_elem = ET.SubElement(root, "timeSeries", {"id": m.get("id", "")})
+            pi_elem = ET.SubElement(ts_elem, "PITimeSeries")
+            loc_elem = ET.SubElement(pi_elem, "locationId")
+            loc_elem.text = m.get("locationId", "")
+            param_elem = ET.SubElement(pi_elem, "parameterId")
+            param_elem.text = m.get("parameterId", "")
+
+        xml_str = ET.tostring(root, encoding="utf-8")
+        parsed_dom = minidom.parseString(xml_str)
+        pretty_xml = parsed_dom.toprettyxml(indent="\t", encoding="UTF-8").decode("utf-8")
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(pretty_xml)
+        return True
+
+    def import_rtc_data_config_from_xml(self, file_path):
+        """Imports rtcDataConfig timeSeries mappings from an XML file."""
+        import xml.etree.ElementTree as ET
+
+        if not os.path.exists(file_path):
+            return False
+
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+
+        imported = []
+        for ts_elem in root.findall("{*}timeSeries"):
+            ts_id = ts_elem.get("id", "")
+            pi_elem = ts_elem.find("{*}PITimeSeries")
+            loc_id = ""
+            param_id = ""
+            if pi_elem is not None:
+                loc_node = pi_elem.find("{*}locationId")
+                param_node = pi_elem.find("{*}parameterId")
+                if loc_node is not None and loc_node.text:
+                    loc_id = loc_node.text.strip()
+                if param_node is not None and param_node.text:
+                    param_id = param_node.text.strip()
+
+            if ts_id:
+                imported.append({
+                    "id": ts_id,
+                    "locationId": loc_id,
+                    "parameterId": param_id
+                })
+
+        self.rtc_data_config = imported
+        return True
+
     def export_to_json(self, file_path):
-        """Exports point elements, branch connections, goal table, and plot table to a JSON file."""
+        """Exports point elements, branch connections, goal table, plot table, and rtcDataConfig mappings to a JSON file."""
         crs_str = self.nodes_layer.crs().authid() if self.nodes_layer else self.get_canvas_crs()
         elements = self.get_all_elements()
 
@@ -793,7 +865,8 @@ class ModelManager(QObject):
             "element_count": len(elements),
             "elements": elements,
             "goals": self.goals,
-            "plots": self.plots
+            "plots": self.plots,
+            "rtc_data_config": self.rtc_data_config
         }
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -802,7 +875,7 @@ class ModelManager(QObject):
         return True
 
     def import_from_json(self, file_path):
-        """Imports point elements, branch connections, goal table, and plot table from a JSON file."""
+        """Imports point elements, branch connections, goal table, plot table, and rtcDataConfig mappings from a JSON file."""
         if not os.path.exists(file_path):
             return False
 
@@ -813,6 +886,7 @@ class ModelManager(QObject):
         self.clear_all()
         self.goals = data.get("goals", [])
         self.plots = data.get("plots", [])
+        self.rtc_data_config = data.get("rtc_data_config", [])
 
         point_elems = [e for e in elements if e.get("type") != "Branch"]
         branch_elems = [e for e in elements if e.get("type") == "Branch"]
@@ -1134,12 +1208,15 @@ class ModelManager(QObject):
         os.makedirs(model_sub_dir, exist_ok=True)
         os.makedirs(src_dir, exist_ok=True)
 
-        # 3. Save goal_table.csv and plot_table.csv in input/
+        # 3. Save goal_table.csv, plot_table.csv, and rtcDataConfig.xml in input/
         goal_csv_path = os.path.join(input_dir, "goal_table.csv")
         self.export_goals_to_csv(goal_csv_path)
 
         plot_csv_path = os.path.join(input_dir, "plot_table.csv")
         self.export_plots_to_csv(plot_csv_path)
+
+        data_config_xml_path = os.path.join(input_dir, "rtcDataConfig.xml")
+        self.export_rtc_data_config_to_xml(data_config_xml_path)
 
         # 4. Save Modelica file in model/
         mo_file_path = os.path.join(model_sub_dir, f"{model_name}.mo")
