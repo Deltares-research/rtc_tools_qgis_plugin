@@ -13,12 +13,36 @@ from qgis.PyQt.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QLabel,
+    QScrollArea,
 )
 from qgis.PyQt.QtCore import Qt
 from qgis.core import Qgis
 
 from .element_dialog import ElementDialog
 from .goal_table_dialog import GoalTableDialog
+
+class CollapsibleGroupBox(QGroupBox):
+    """A QGroupBox that can expand and collapse its content area when toggled via its checkbox."""
+
+    def __init__(self, title, expanded=False, parent=None):
+        super().__init__(title, parent)
+        self.setCheckable(True)
+        self.setChecked(expanded)
+
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(4, 4, 4, 4)
+
+        box_layout = QVBoxLayout(self)
+        box_layout.setContentsMargins(6, 12, 6, 6)
+        box_layout.addWidget(self.content_widget)
+
+        self.toggled.connect(self._on_toggled)
+        self.content_widget.setVisible(expanded)
+
+    def _on_toggled(self, checked):
+        self.content_widget.setVisible(checked)
+
 
 class RTCToolsDockWidget(QDockWidget):
     """Dockable panel for RTC-Tools model building and JSON export."""
@@ -38,9 +62,12 @@ class RTCToolsDockWidget(QDockWidget):
         self.refresh_table()
 
     def _init_ui(self):
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+
         main_widget = QWidget()
         layout = QVBoxLayout(main_widget)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # Title Label
         title_label = QLabel("<b>RTC-Tools Model Builder</b>")
@@ -48,8 +75,8 @@ class RTCToolsDockWidget(QDockWidget):
         layout.addWidget(title_label)
 
         # --- 1. Element Placement Group ---
-        grp_placement = QGroupBox("Add Elements")
-        layout_placement = QVBoxLayout(grp_placement)
+        grp_placement = CollapsibleGroupBox("Add Elements", expanded=False)
+        layout_placement = grp_placement.content_layout
 
         h_layout_type = QHBoxLayout()
         h_layout_type.addWidget(QLabel("Element Type:"))
@@ -68,14 +95,15 @@ class RTCToolsDockWidget(QDockWidget):
         layout.addWidget(grp_placement)
 
         # --- 2. Model Elements Table Group ---
-        grp_table = QGroupBox("Model Elements")
-        layout_table = QVBoxLayout(grp_table)
+        grp_table = CollapsibleGroupBox("Model Elements", expanded=False)
+        layout_table = grp_table.content_layout
 
         self.table_elements = QTableWidget(0, 4)
         self.table_elements.setHorizontalHeaderLabels(["Name", "Type", "X / Upstream", "Y / Downstream"])
         self.table_elements.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_elements.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_elements.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table_elements.setMinimumHeight(150)
         self.table_elements.doubleClicked.connect(self._edit_selected_element)
         layout_table.addWidget(self.table_elements)
 
@@ -98,8 +126,8 @@ class RTCToolsDockWidget(QDockWidget):
         layout.addWidget(grp_table)
 
         # --- 3. Optimization Goals Group ---
-        grp_goals = QGroupBox("Optimization Goals")
-        layout_goals = QVBoxLayout(grp_goals)
+        grp_goals = CollapsibleGroupBox("Optimization Goals", expanded=False)
+        layout_goals = grp_goals.content_layout
 
         self.btn_edit_goals = QPushButton("🎯 Edit Goal Table...")
         self.btn_edit_goals.setStyleSheet("padding: 5px;")
@@ -118,8 +146,8 @@ class RTCToolsDockWidget(QDockWidget):
         layout.addWidget(grp_goals)
 
         # --- 4. Save / Export Group ---
-        grp_export = QGroupBox("Model File")
-        layout_export = QVBoxLayout(grp_export)
+        grp_export = CollapsibleGroupBox("Model File", expanded=False)
+        layout_export = grp_export.content_layout
 
         self.btn_validate = QPushButton("🔍 Validate Model")
         self.btn_validate.setStyleSheet("padding: 5px;")
@@ -143,7 +171,9 @@ class RTCToolsDockWidget(QDockWidget):
         layout.addWidget(grp_export)
 
         layout.addStretch()
-        self.setWidget(main_widget)
+
+        scroll_area.setWidget(main_widget)
+        self.setWidget(scroll_area)
 
     def _connect_signals(self):
         # Connect model manager signals to refresh GUI automatically

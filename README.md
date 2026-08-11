@@ -24,6 +24,7 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - `Reservoir`: Exactly 1 input and 1 output
   - `Node`: At least 1 input and exactly 1 output
   - `Branch`: Valid upstream and downstream connections
+- **Collapsible Panel Sections**: Toggle between expand/collapse states for all dock panel sections ("Add Elements", "Model Elements", "Optimization Goals", "Model File") to optimize screen space.
 - **Optimization Goal Table**:
   - Interactive Goal Table editor supporting all RTC-Tools goal parameters (`id`, `state`, `active`, `goal_type`, `function_min`, `function_max`, `function_nominal`, `target_data_type`, `target_min`, `target_max`, `priority`, `weight`, `order`, `Description`)
   - Auto-suggests state variable names from current model elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
