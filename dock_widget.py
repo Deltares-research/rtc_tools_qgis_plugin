@@ -24,6 +24,7 @@ from .element_dialog import ElementDialog
 from .goal_table_dialog import GoalTableDialog
 from .plot_table_dialog import PlotTableDialog
 from .rtc_data_config_dialog import RtcDataConfigDialog
+from .rtc_parameter_config_dialog import RtcParameterConfigDialog
 
 class CollapsibleGroupBox(QGroupBox):
     """A QGroupBox that can expand and collapse its content area when toggled via its checkbox."""
@@ -189,7 +190,27 @@ class RTCToolsDockWidget(QDockWidget):
 
         layout.addWidget(grp_data_config)
 
-        # --- 6. Save / Export Group ---
+        # --- 6. Parameter Config Group ---
+        grp_param_config = CollapsibleGroupBox("Parameter Config", expanded=False)
+        layout_param_config = grp_param_config.content_layout
+
+        self.btn_edit_param_config = QPushButton("⚙️ Edit rtcParameterConfig Table...")
+        self.btn_edit_param_config.setStyleSheet("padding: 5px;")
+        self.btn_edit_param_config.clicked.connect(self._edit_rtc_parameter_config)
+        layout_param_config.addWidget(self.btn_edit_param_config)
+
+        h_layout_param_config_xml = QHBoxLayout()
+        self.btn_export_param_config_xml = QPushButton("📊 Export XML...")
+        self.btn_export_param_config_xml.clicked.connect(self._export_rtc_parameter_config_xml)
+        self.btn_import_param_config_xml = QPushButton("📂 Import XML...")
+        self.btn_import_param_config_xml.clicked.connect(self._import_rtc_parameter_config_xml)
+        h_layout_param_config_xml.addWidget(self.btn_export_param_config_xml)
+        h_layout_param_config_xml.addWidget(self.btn_import_param_config_xml)
+        layout_param_config.addLayout(h_layout_param_config_xml)
+
+        layout.addWidget(grp_param_config)
+
+        # --- 7. Save / Export Group ---
         grp_export = CollapsibleGroupBox("Model File", expanded=False)
         layout_export = grp_export.content_layout
 
@@ -666,6 +687,57 @@ class RTCToolsDockWidget(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Imported {len(self.model_manager.get_rtc_data_config())} mappings from '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _edit_rtc_parameter_config(self):
+        """Opens the rtcParameterConfig Editor dialog."""
+        current_params = self.model_manager.get_rtc_parameter_config()
+        dlg = RtcParameterConfigDialog(parameters=current_params, model_manager=self.model_manager, parent=self)
+        if dlg.exec_() == RtcParameterConfigDialog.Accepted:
+            updated_params = dlg.get_updated_parameters()
+            self.model_manager.set_rtc_parameter_config(updated_params)
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                f"rtcParameterConfig updated ({len(updated_params)} parameters configured)",
+                level=Qgis.MessageLevel.Success,
+                duration=3
+            )
+
+    def _export_rtc_parameter_config_xml(self):
+        """Exports the rtcParameterConfig table to an XML file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export rtcParameterConfig XML",
+            os.path.expanduser("~/rtcParameterConfig.xml"),
+            "XML Files (*.xml);;All Files (*)"
+        )
+        if file_path:
+            if not file_path.lower().endswith(".xml"):
+                file_path += ".xml"
+
+            if self.model_manager.export_rtc_parameter_config_to_xml(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"rtcParameterConfig XML exported successfully to '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _import_rtc_parameter_config_xml(self):
+        """Imports the rtcParameterConfig table from an XML file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import rtcParameterConfig XML",
+            os.path.expanduser("~"),
+            "XML Files (*.xml);;All Files (*)"
+        )
+        if file_path:
+            if self.model_manager.import_rtc_parameter_config_from_xml(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Imported {len(self.model_manager.get_rtc_parameter_config())} parameters from '{file_path}'",
                     level=Qgis.MessageLevel.Success,
                     duration=5
                 )

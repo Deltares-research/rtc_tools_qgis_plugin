@@ -15,6 +15,7 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - `<ModelName>/input/goal_table.csv` (goal table)
   - `<ModelName>/input/plot_table.csv` (plot configuration table)
   - `<ModelName>/input/rtcDataConfig.xml` (timeSeries mapping XML)
+  - `<ModelName>/input/rtcParameterConfig.xml` (parameters XML)
   - `<ModelName>/model/<ModelName>.mo` (Modelica file)
   - `<ModelName>/src/<ModelName>.py` (Python optimization runner script)
   - `<ModelName>/output/` (empty output folder)
@@ -48,6 +49,11 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - Auto-suggests model variables from placed elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
   - Export & Import mappings to/from standard FEWS `rtcDataConfig.xml`
   - Full preservation of timeSeries mappings inside exported and imported JSON model files
+- **Parameter Config (`rtcParameterConfig.xml`)**:
+  - Interactive table managing model parameters (`id`, `name`, `type`, `value`)
+  - Supports multiple FEWS parameter types (`double`, `integer`, `boolean`, `string`, `dateTime`) with correct XML tags (`<dblValue>`, `<intValue>`, `<boolValue>`, `<stringValue>`, `<dateTimeValue>`)
+  - Export & Import parameter definitions to/from standard FEWS `rtcParameterConfig.xml`
+  - Full preservation of parameter configuration inside exported and imported JSON model files
 - **Property Management**: Edit properties, names, and custom key-value metadata.
 - **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 
@@ -55,16 +61,19 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
 
 ```
 RTC-Tools-QGIS-Plugin/
-├── metadata.txt         # QGIS plugin metadata specification
-├── __init__.py          # Plugin entry point (classFactory)
-├── plugin.py            # Main plugin controller class (RTCToolsPlugin)
-├── model_manager.py     # Layer management, element data, topological validation, goal table, JSON export/import
-├── map_tool.py          # Custom QgsMapTool for canvas point selection and line branch creation
-├── dock_widget.py       # RTCToolsDockWidget UI panel
-├── element_dialog.py    # Element properties editor dialog
-├── goal_table_dialog.py # Optimization Goal Table editor dialog
-├── icon.png             # Plugin toolbar icon
-└── README.md            # Documentation
+├── metadata.txt                  # QGIS plugin metadata specification
+├── __init__.py                   # Plugin entry point (classFactory)
+├── plugin.py                     # Main plugin controller class (RTCToolsPlugin)
+├── model_manager.py              # Layer management, element data, topological validation, JSON export/import
+├── map_tool.py                   # Custom QgsMapTool for canvas point selection and line branch creation
+├── dock_widget.py                # RTCToolsDockWidget UI panel
+├── element_dialog.py             # Element properties editor dialog
+├── goal_table_dialog.py          # Optimization Goal Table editor dialog
+├── plot_table_dialog.py          # Plot Table editor dialog
+├── rtc_data_config_dialog.py     # FEWS rtcDataConfig editor dialog
+├── rtc_parameter_config_dialog.py# FEWS rtcParameterConfig editor dialog
+├── icon.png                      # Plugin toolbar icon
+└── README.md                     # Documentation
 ```
 
 ## JSON Model Output Format
