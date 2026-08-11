@@ -13,6 +13,7 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
 - **Full RTC-Tools Model Package Construction**: Automatically scaffold complete RTC-Tools model project directory structures:
   - `<ModelName>.json` (JSON model file)
   - `<ModelName>/input/goal_table.csv` (goal table)
+  - `<ModelName>/input/plot_table.csv` (plot configuration table)
   - `<ModelName>/model/<ModelName>.mo` (Modelica file)
   - `<ModelName>/src/<ModelName>.py` (Python optimization runner script)
   - `<ModelName>/output/` (empty output folder)
@@ -36,6 +37,11 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - Auto-suggests state variable names from current model elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
   - Export & Import goals to/from RTC-Tools standard CSV format (`goal_table.csv`)
   - Full preservation of goal configuration inside exported and imported JSON model files
+- **Plot Table Configuration**:
+  - Interactive Plot Table editor supporting columns: `id`, `y_axis_title`, `variables_style_1`, `variables_style_2`, `custom_title`, `specified_in`
+  - Validates unique `id` constraints and fixes `specified_in` to `goal_generator`
+  - Export & Import plots to/from RTC-Tools standard CSV format (`plot_table.csv`)
+  - Full preservation of plot configuration inside exported and imported JSON model files
 - **Property Management**: Edit properties, names, and custom key-value metadata.
 - **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 

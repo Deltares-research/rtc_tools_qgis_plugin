@@ -38,6 +38,7 @@ class ModelManager(QObject):
         self.nodes_layer = None
         self.branches_layer = None
         self.goals = []
+        self.plots = []
         self._element_counter = 0
 
     def get_canvas_crs(self):
@@ -667,6 +668,7 @@ class ModelManager(QObject):
                 self.branches_layer.triggerRepaint()
 
         self.goals = []
+        self.plots = []
         self._element_counter = 0
         self.modelCleared.emit()
 
@@ -677,6 +679,14 @@ class ModelManager(QObject):
     def set_goals(self, goals):
         """Sets list of goal dictionaries."""
         self.goals = [dict(g) for g in (goals or [])]
+
+    def get_plots(self):
+        """Returns list of plot dictionaries."""
+        return self.plots
+
+    def set_plots(self, plots):
+        """Sets list of plot dictionaries."""
+        self.plots = [dict(p) for p in (plots or [])]
 
     def get_suggested_state_variables(self):
         """Returns list of suggested Modelica state variable names derived from point elements."""
@@ -738,8 +748,41 @@ class ModelManager(QObject):
         self.goals = imported
         return True
 
+    def export_plots_to_csv(self, file_path):
+        """Exports plots table to a CSV file."""
+        import csv
+        fieldnames = [
+            "id", "y_axis_title", "variables_style_1", "variables_style_2",
+            "custom_title", "specified_in"
+        ]
+        with open(file_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for p in self.plots:
+                row = dict(p)
+                row["specified_in"] = "goal_generator"
+                writer.writerow(row)
+        return True
+
+    def import_plots_from_csv(self, file_path):
+        """Imports plots table from a CSV file."""
+        import csv
+        fieldnames = [
+            "id", "y_axis_title", "variables_style_1", "variables_style_2",
+            "custom_title", "specified_in"
+        ]
+        imported = []
+        with open(file_path, "r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                plot = {col: row.get(col, "") for col in fieldnames}
+                plot["specified_in"] = "goal_generator"
+                imported.append(plot)
+        self.plots = imported
+        return True
+
     def export_to_json(self, file_path):
-        """Exports point elements, branch connections, and goal table to a JSON file."""
+        """Exports point elements, branch connections, goal table, and plot table to a JSON file."""
         crs_str = self.nodes_layer.crs().authid() if self.nodes_layer else self.get_canvas_crs()
         elements = self.get_all_elements()
 
@@ -749,7 +792,8 @@ class ModelManager(QObject):
             "crs": crs_str,
             "element_count": len(elements),
             "elements": elements,
-            "goals": self.goals
+            "goals": self.goals,
+            "plots": self.plots
         }
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -758,7 +802,7 @@ class ModelManager(QObject):
         return True
 
     def import_from_json(self, file_path):
-        """Imports point elements, branch connections, and goal table from a JSON file."""
+        """Imports point elements, branch connections, goal table, and plot table from a JSON file."""
         if not os.path.exists(file_path):
             return False
 
@@ -768,6 +812,7 @@ class ModelManager(QObject):
         elements = data.get("elements", [])
         self.clear_all()
         self.goals = data.get("goals", [])
+        self.plots = data.get("plots", [])
 
         point_elems = [e for e in elements if e.get("type") != "Branch"]
         branch_elems = [e for e in elements if e.get("type") == "Branch"]
@@ -1089,9 +1134,12 @@ class ModelManager(QObject):
         os.makedirs(model_sub_dir, exist_ok=True)
         os.makedirs(src_dir, exist_ok=True)
 
-        # 3. Save goal_table.csv in input/
+        # 3. Save goal_table.csv and plot_table.csv in input/
         goal_csv_path = os.path.join(input_dir, "goal_table.csv")
         self.export_goals_to_csv(goal_csv_path)
+
+        plot_csv_path = os.path.join(input_dir, "plot_table.csv")
+        self.export_plots_to_csv(plot_csv_path)
 
         # 4. Save Modelica file in model/
         mo_file_path = os.path.join(model_sub_dir, f"{model_name}.mo")

@@ -22,6 +22,7 @@ from qgis.core import Qgis
 
 from .element_dialog import ElementDialog
 from .goal_table_dialog import GoalTableDialog
+from .plot_table_dialog import PlotTableDialog
 
 class CollapsibleGroupBox(QGroupBox):
     """A QGroupBox that can expand and collapse its content area when toggled via its checkbox."""
@@ -137,9 +138,9 @@ class RTCToolsDockWidget(QDockWidget):
         layout_goals.addWidget(self.btn_edit_goals)
 
         h_layout_goals_csv = QHBoxLayout()
-        self.btn_export_goals_csv = QPushButton("📊 Export CSV...")
+        self.btn_export_goals_csv = QPushButton("📊 Export Goal CSV...")
         self.btn_export_goals_csv.clicked.connect(self._export_goals_csv)
-        self.btn_import_goals_csv = QPushButton("📂 Import CSV...")
+        self.btn_import_goals_csv = QPushButton("📂 Import Goal CSV...")
         self.btn_import_goals_csv.clicked.connect(self._import_goals_csv)
         h_layout_goals_csv.addWidget(self.btn_export_goals_csv)
         h_layout_goals_csv.addWidget(self.btn_import_goals_csv)
@@ -147,7 +148,27 @@ class RTCToolsDockWidget(QDockWidget):
 
         layout.addWidget(grp_goals)
 
-        # --- 4. Save / Export Group ---
+        # --- 4. Plot Configuration Group ---
+        grp_plots = CollapsibleGroupBox("Plot Configuration", expanded=False)
+        layout_plots = grp_plots.content_layout
+
+        self.btn_edit_plots = QPushButton("📈 Edit Plot Table...")
+        self.btn_edit_plots.setStyleSheet("padding: 5px;")
+        self.btn_edit_plots.clicked.connect(self._edit_plot_table)
+        layout_plots.addWidget(self.btn_edit_plots)
+
+        h_layout_plots_csv = QHBoxLayout()
+        self.btn_export_plots_csv = QPushButton("📊 Export Plot CSV...")
+        self.btn_export_plots_csv.clicked.connect(self._export_plots_csv)
+        self.btn_import_plots_csv = QPushButton("📂 Import Plot CSV...")
+        self.btn_import_plots_csv.clicked.connect(self._import_plots_csv)
+        h_layout_plots_csv.addWidget(self.btn_export_plots_csv)
+        h_layout_plots_csv.addWidget(self.btn_import_plots_csv)
+        layout_plots.addLayout(h_layout_plots_csv)
+
+        layout.addWidget(grp_plots)
+
+        # --- 5. Save / Export Group ---
         grp_export = CollapsibleGroupBox("Model File", expanded=False)
         layout_export = grp_export.content_layout
 
@@ -522,6 +543,57 @@ class RTCToolsDockWidget(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Imported {len(self.model_manager.get_goals())} goals from '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _edit_plot_table(self):
+        """Opens the Plot Table Editor dialog."""
+        current_plots = self.model_manager.get_plots()
+        dlg = PlotTableDialog(plots=current_plots, model_manager=self.model_manager, parent=self)
+        if dlg.exec_() == PlotTableDialog.Accepted:
+            updated_plots = dlg.get_updated_plots()
+            self.model_manager.set_plots(updated_plots)
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                f"Plot table updated ({len(updated_plots)} plots configured)",
+                level=Qgis.MessageLevel.Success,
+                duration=3
+            )
+
+    def _export_plots_csv(self):
+        """Exports the plot table to a CSV file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Plot Table CSV",
+            os.path.expanduser("~/plot_table.csv"),
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if file_path:
+            if not file_path.lower().endswith(".csv"):
+                file_path += ".csv"
+
+            if self.model_manager.export_plots_to_csv(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Plot table exported successfully to '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _import_plots_csv(self):
+        """Imports the plot table from a CSV file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Plot Table CSV",
+            os.path.expanduser("~"),
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if file_path:
+            if self.model_manager.import_plots_from_csv(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Imported {len(self.model_manager.get_plots())} plots from '{file_path}'",
                     level=Qgis.MessageLevel.Success,
                     duration=5
                 )
