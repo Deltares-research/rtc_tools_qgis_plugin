@@ -901,13 +901,32 @@ class ModelManager(QObject):
                     f"  Deltares.ChannelFlow.SimpleRouting.Reservoir.Reservoir {var_name}(V(min = {min_val}, max = {max_val}, nominal = {nom_val}), n_QForcing = 0);"
                 )
 
+                # Helper to format optional min, max, nominal attributes
+                def _fmt_attrs(prefix_key):
+                    attrs = []
+                    mn = props.get(f"{prefix_key}_min", props.get(f"{prefix_key.lower()}_min"))
+                    mx = props.get(f"{prefix_key}_max", props.get(f"{prefix_key.lower()}_max"))
+                    nm = props.get(f"{prefix_key}_nominal", props.get(f"{prefix_key.lower()}_nominal"))
+                    if mn is not None and str(mn) != "": attrs.append(f"min = {mn}")
+                    if mx is not None and str(mx) != "": attrs.append(f"max = {mx}")
+                    if nm is not None and str(nm) != "": attrs.append(f"nominal = {nm}")
+                    return ", ".join(attrs)
+
+                turb_attrs = _fmt_attrs("Turbine")
+                spill_attrs = _fmt_attrs("Spill")
+                qout_attrs = _fmt_attrs("Qout")
+
+                turb_str = f"({turb_attrs}, fixed = false)" if turb_attrs else "(fixed = false)"
+                spill_str = f"({spill_attrs}, fixed = false)" if spill_attrs else "(fixed = false)"
+                qout_str = f"({qout_attrs})" if qout_attrs else ""
+
                 # Decision / Optimization variables for Reservoir
-                input_opt_lines.append(f"  input SI.VolumeFlowRate {var_name}_Q_turbine(fixed = false);")
-                input_opt_lines.append(f"  input SI.VolumeFlowRate {var_name}_Q_spill(fixed = false);")
+                input_opt_lines.append(f"  input SI.VolumeFlowRate {var_name}_Q_turbine{turb_str};")
+                input_opt_lines.append(f"  input SI.VolumeFlowRate {var_name}_Q_spill{spill_str};")
 
                 # Reservoir outputs
                 output_lines.append(f"  output SI.Volume {var_name}_V;")
-                output_lines.append(f"  output SI.VolumeFlowRate {var_name}_Q_out;")
+                output_lines.append(f"  output SI.VolumeFlowRate {var_name}_Q_out{qout_str};")
 
                 # Reservoir assignment equations
                 assign_lines.append(f"  {var_name}.Q_turbine = {var_name}_Q_turbine;")
@@ -925,12 +944,29 @@ class ModelManager(QObject):
                 assign_lines.append(f"  {var_name}.Q = {var_name}_Inflow;")
 
             elif ptype in ["Terminal", "Level"]:
+                props = p.get("properties", {})
                 term_lines.append(
                     f"  Deltares.ChannelFlow.SimpleRouting.BoundaryConditions.Terminal {var_name};"
                 )
 
+                # Format Level flow attributes if present
+                flow_attrs = []
+                f_min = props.get("Flow_min", props.get("flow_min"))
+                f_max = props.get("Flow_max", props.get("flow_max"))
+                f_nom = props.get("Flow_nominal", props.get("flow_nominal"))
+
+                if f_min is not None and str(f_min) != "": flow_attrs.append(f"min = {f_min}")
+                if f_max is not None and str(f_max) != "": flow_attrs.append(f"max = {f_max}")
+                if f_nom is not None and str(f_nom) != "": flow_attrs.append(f"nominal = {f_nom}")
+
+                if flow_attrs:
+                    flow_attrs.append("fixed = false")
+                    q_decl_str = f"({', '.join(flow_attrs)})"
+                else:
+                    q_decl_str = ""
+
                 # Terminal / Level output
-                output_lines.append(f"  output SI.VolumeFlowRate {var_name}_Q;")
+                output_lines.append(f"  output SI.VolumeFlowRate {var_name}_Q{q_decl_str};")
                 assign_lines.append(f"  {var_name}_Q = {var_name}.Q;")
 
         for b in branches:
