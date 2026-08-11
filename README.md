@@ -54,6 +54,11 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - Supports multiple FEWS parameter types (`double`, `integer`, `boolean`, `string`, `dateTime`) with correct XML tags (`<dblValue>`, `<intValue>`, `<boolValue>`, `<stringValue>`, `<dateTimeValue>`)
   - Export & Import parameter definitions to/from standard FEWS `rtcParameterConfig.xml`
   - Full preservation of parameter configuration inside exported and imported JSON model files
+- **Model Execution & Results**:
+  - Interactive **Model Run** section allowing selection of virtual environment Python executables.
+  - Comprehensive pre-flight checks (JSON saved, project folders `input`, `model`, `src`, `output`, configuration CSVs/XMLs, `<ModelName>.mo`, `<ModelName>.py`, and `timeseries_import.xml`).
+  - Runs optimization script and redirects logs to `output/rtc_tools_log.txt`.
+  - Result view buttons: **Log Messages**, **Show Result Folder**, and **Show Final Result** (`output/figures/final_results.html`).
 - **Property Management**: Edit properties, names, and custom key-value metadata.
 - **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 

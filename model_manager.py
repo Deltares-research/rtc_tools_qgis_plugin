@@ -41,6 +41,7 @@ class ModelManager(QObject):
         self.plots = []
         self.rtc_data_config = []
         self.rtc_parameter_config = []
+        self.last_saved_json_path = None
         self._element_counter = 0
 
     def get_canvas_crs(self):
@@ -975,6 +976,8 @@ class ModelManager(QObject):
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(model_data, f, indent=2)
 
+        self.last_saved_json_path = os.path.abspath(file_path)
+
         return True
 
     def import_from_json(self, file_path):
@@ -991,6 +994,8 @@ class ModelManager(QObject):
         self.plots = data.get("plots", [])
         self.rtc_data_config = data.get("rtc_data_config", [])
         self.rtc_parameter_config = data.get("rtc_parameter_config", [])
+
+        self.last_saved_json_path = os.path.abspath(file_path)
 
         point_elems = [e for e in elements if e.get("type") != "Branch"]
         branch_elems = [e for e in elements if e.get("type") == "Branch"]

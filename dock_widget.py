@@ -210,7 +210,46 @@ class RTCToolsDockWidget(QDockWidget):
 
         layout.addWidget(grp_param_config)
 
-        # --- 7. Save / Export Group ---
+        # --- 7. Model Run Group ---
+        grp_run = CollapsibleGroupBox("Model Run", expanded=False)
+        layout_run = grp_run.content_layout
+
+        h_layout_venv = QHBoxLayout()
+        h_layout_venv.addWidget(QLabel("Python Environment:"))
+        self.btn_browse_venv = QPushButton("Browse...")
+        self.btn_browse_venv.clicked.connect(self._browse_venv_python)
+        h_layout_venv.addWidget(self.btn_browse_venv)
+        layout_run.addLayout(h_layout_venv)
+
+        self.lbl_venv_path = QLabel("System Default Python")
+        self.lbl_venv_path.setStyleSheet("color: #555555; font-size: 10px;")
+        self.lbl_venv_path.setWordWrap(True)
+        layout_run.addWidget(self.lbl_venv_path)
+        self.venv_python_executable = None
+
+        self.btn_run_rtc = QPushButton("▶ Run RTC-Tools Model")
+        self.btn_run_rtc.setStyleSheet("font-weight: bold; padding: 6px; background-color: #27AE60; color: white;")
+        self.btn_run_rtc.clicked.connect(self._run_rtc_tools_model)
+        layout_run.addWidget(self.btn_run_rtc)
+
+        h_layout_run_results = QHBoxLayout()
+        self.btn_show_log = QPushButton("📄 Log Messages")
+        self.btn_show_log.clicked.connect(self._show_log_messages)
+
+        self.btn_show_res_folder = QPushButton("📁 Show Result Folder")
+        self.btn_show_res_folder.clicked.connect(self._show_result_folder)
+
+        h_layout_run_results.addWidget(self.btn_show_log)
+        h_layout_run_results.addWidget(self.btn_show_res_folder)
+        layout_run.addLayout(h_layout_run_results)
+
+        self.btn_show_final_result = QPushButton("🌐 Show Final Result")
+        self.btn_show_final_result.clicked.connect(self._show_final_result)
+        layout_run.addWidget(self.btn_show_final_result)
+
+        layout.addWidget(grp_run)
+
+        # --- 8. Save / Export Group ---
         grp_export = CollapsibleGroupBox("Model File", expanded=False)
         layout_export = grp_export.content_layout
 
@@ -255,6 +294,9 @@ class RTCToolsDockWidget(QDockWidget):
         # Map tool placement signal
         self.map_tool.elementPlaced.connect(self._on_element_placed)
 
+        # Refresh Model Run buttons initial state
+        self._update_run_buttons_state()
+
     def get_selected_element_type(self):
         return self.combo_element_type.currentText()
 
@@ -289,6 +331,7 @@ class RTCToolsDockWidget(QDockWidget):
 
     def _on_element_changed(self, *args):
         self.refresh_table()
+        self._update_run_buttons_state()
 
     def refresh_table(self):
         """Reloads element data into the table widget."""
@@ -741,3 +784,284 @@ class RTCToolsDockWidget(QDockWidget):
                     level=Qgis.MessageLevel.Success,
                     duration=5
                 )
+
+    def _browse_venv_python(self):
+        """Allows user to browse for a virtual environment Python executable."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Virtual Environment Python Executable",
+            os.path.expanduser("~"),
+            "Python Executable (python.exe python3 python);;All Files (*)"
+        )
+        if file_path:
+            self.venv_python_executable = file_path
+            self.lbl_venv_path.setText(f"Python: {file_path}")
+
+    def _get_active_python_executable(self):
+        return self.venv_python_executable or "python"
+
+    def _get_current_model_context(self):
+        """Returns tuple (json_path, model_dir, model_name) if valid saved model exists."""
+        json_path = getattr(self.model_manager, "last_saved_json_path", None)
+        if not json_path or not os.path.exists(json_path):
+            return None, None, None
+
+        base_dir = os.path.dirname(json_path)
+        json_filename = os.path.basename(json_path)
+        model_name = os.path.splitext(json_filename)[0]
+
+        model_dir = os.path.join(base_dir, model_name)
+        return json_path, model_dir, model_name
+
+    def _update_run_buttons_state(self):
+        """Updates enablement of Log Messages, Show Result Folder, and Show Final Result buttons."""
+        _, model_dir, _ = self.get_current_model_context_for_ui()
+
+        has_log = False
+        has_output_dir = False
+        has_final_result = False
+
+        if model_dir and os.path.isdir(model_dir):
+            output_dir = os.path.join(model_dir, "output")
+            if os.path.isdir(output_dir):
+                has_output_dir = True
+
+            log_file = os.path.join(output_dir, "rtc_tools_log.txt") if has_output_dir else None
+            if log_file and os.path.exists(log_file):
+                has_log = True
+
+            html_file = os.path.join(output_dir, "figures", "final_results.html") if has_output_dir else None
+            if html_file and os.path.exists(html_file):
+                has_final_result = True
+
+        self.btn_show_log.setEnabled(has_log)
+        self.btn_show_res_folder.setEnabled(has_output_dir)
+        self.btn_show_final_result.setEnabled(has_final_result)
+
+    def get_current_model_context_for_ui(self):
+        json_path = getattr(self.model_manager, "last_saved_json_path", None)
+        if not json_path:
+            return None, None, None
+        base_dir = os.path.dirname(json_path)
+        model_name = os.path.splitext(os.path.basename(json_path))[0]
+        model_dir = os.path.join(base_dir, model_name)
+        return json_path, model_dir, model_name
+
+    def _run_rtc_tools_model(self):
+        """Validates model files & directories, then executes the RTC-Tools Python script."""
+        import subprocess
+
+        # 1. Check if model has been saved to JSON
+        json_path, model_dir, model_name = self._get_current_model_context()
+        if not json_path:
+            QMessageBox.critical(
+                self,
+                "Model Not Saved",
+                "The constructed model has not been saved to a JSON file yet.\n\n"
+                "Please click 'Save Model to JSON...' or 'Construct RTC-Tools Model...' first."
+            )
+            return
+
+        # 2. Check if sibling model directory exists
+        if not os.path.isdir(model_dir):
+            QMessageBox.critical(
+                self,
+                "Model Directory Missing",
+                f"The RTC-Tools model directory was not found:\n'{model_dir}'\n\n"
+                "Please click 'Construct RTC-Tools Model...' to generate the project directory."
+            )
+            return
+
+        # 3. Check subfolders
+        input_dir = os.path.join(model_dir, "input")
+        output_dir = os.path.join(model_dir, "output")
+        model_sub_dir = os.path.join(model_dir, "model")
+        src_dir = os.path.join(model_dir, "src")
+
+        for s_dir, s_name in [(input_dir, "input"), (output_dir, "output"), (model_sub_dir, "model"), (src_dir, "src")]:
+            if not os.path.isdir(s_dir):
+                QMessageBox.critical(
+                    self,
+                    "Subfolder Missing",
+                    f"Required subfolder '{s_name}' is missing inside:\n'{model_dir}'"
+                )
+                return
+
+        # 4. Check required input files
+        required_inputs = ["plot_table.csv", "goal_table.csv", "rtcDataConfig.xml", "rtcParameterConfig.xml"]
+        for f_name in required_inputs:
+            f_path = os.path.join(input_dir, f_name)
+            if not os.path.exists(f_path):
+                QMessageBox.critical(
+                    self,
+                    "Required File Missing",
+                    f"Required configuration file '{f_name}' is missing in:\n'{input_dir}'"
+                )
+                return
+
+        # Check timeseries_import.xml with manual copy explanation
+        timeseries_import_path = os.path.join(input_dir, "timeseries_import.xml")
+        if not os.path.exists(timeseries_import_path):
+            QMessageBox.critical(
+                self,
+                "timeseries_import.xml Missing",
+                f"Required file 'timeseries_import.xml' was not found in:\n'{input_dir}'\n\n"
+                "This file is not generated by the plugin. Please copy your 'timeseries_import.xml' file manually into the 'input' folder."
+            )
+            return
+
+        # 5. Check Modelica file in model/
+        mo_file_path = os.path.join(model_sub_dir, f"{model_name}.mo")
+        if not os.path.exists(mo_file_path):
+            QMessageBox.critical(
+                self,
+                "Modelica File Missing",
+                f"Modelica model file '{model_name}.mo' was not found in:\n'{model_sub_dir}'"
+            )
+            return
+
+        # 6. Check Python source file in src/
+        py_file_path = os.path.join(src_dir, f"{model_name}.py")
+        if not os.path.exists(py_file_path):
+            QMessageBox.critical(
+                self,
+                "Python Source File Missing",
+                f"Python source runner file '{model_name}.py' was not found in:\n'{src_dir}'"
+            )
+            return
+
+        # 7. Execute python source file and log output
+        python_exec = self._get_active_python_executable()
+        log_file_path = os.path.join(output_dir, "rtc_tools_log.txt")
+
+        # Prepare clean environment variables to prevent inheriting QGIS internal Python paths
+        run_env = os.environ.copy()
+        run_env.pop("PYTHONPATH", None)
+        run_env.pop("PYTHONHOME", None)
+
+        if self.venv_python_executable and os.path.exists(self.venv_python_executable):
+            venv_bin = os.path.dirname(self.venv_python_executable)
+            venv_root = os.path.dirname(venv_bin)
+            run_env["VIRTUAL_ENV"] = venv_root
+            run_env["PATH"] = venv_bin + os.path.pathsep + run_env.get("PATH", "")
+
+        self.iface.messageBar().pushMessage(
+            "RTC-Tools",
+            f"Running RTC-Tools model '{model_name}'...",
+            level=Qgis.MessageLevel.Info,
+            duration=4
+        )
+
+        try:
+            with open(log_file_path, "w", encoding="utf-8") as log_f:
+                process = subprocess.Popen(
+                    [python_exec, py_file_path],
+                    cwd=model_dir,
+                    env=run_env,
+                    stdout=log_f,
+                    stderr=subprocess.STDOUT
+                )
+                process.wait()
+
+            if process.returncode == 0:
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Model '{model_name}' execution completed successfully!",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Execution Error",
+                    f"Model execution exited with code {process.returncode}.\n"
+                    "Click 'Log Messages' to view the log file."
+                )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Execution Failed",
+                f"Failed to launch Python execution using '{python_exec}':\n{str(e)}"
+            )
+
+        self._update_run_buttons_state()
+
+    def _show_log_messages(self):
+        """Displays the contents of rtc_tools_log.txt in a scrollable message box."""
+        _, model_dir, _ = self.get_current_model_context_for_ui()
+        if not model_dir:
+            return
+
+        log_path = os.path.join(model_dir, "output", "rtc_tools_log.txt")
+        if not os.path.exists(log_path):
+            QMessageBox.information(self, "RTC-Tools Log", "No log file found.")
+            return
+
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                log_content = f.read()
+
+            dlg = QDialog(self)
+            dlg.setWindowTitle("RTC-Tools Log Messages")
+            dlg.resize(700, 500)
+
+            v_layout = QVBoxLayout(dlg)
+            text_box = QLineEdit()
+            text_box.setReadOnly(True)
+
+            from qgis.PyQt.QtWidgets import QTextEdit
+            txt_edit = QTextEdit()
+            txt_edit.setReadOnly(True)
+            txt_edit.setPlainText(log_content)
+            v_layout.addWidget(txt_edit)
+
+            btn_box = QDialogButtonBox(QDialogButtonBox.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            v_layout.addWidget(btn_box)
+
+            dlg.exec_()
+        except Exception as e:
+            QMessageBox.critical(self, "RTC-Tools Log", f"Error reading log file:\n{str(e)}")
+
+    def _show_result_folder(self):
+        """Opens the model output folder in the OS file explorer."""
+        import subprocess, platform
+
+        _, model_dir, _ = self.get_current_model_context_for_ui()
+        if not model_dir:
+            return
+
+        output_dir = os.path.join(model_dir, "output")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
+        system = platform.system()
+        try:
+            if system == "Windows":
+                os.startfile(output_dir)
+            elif system == "Darwin":
+                subprocess.Popen(["open", output_dir])
+            else:
+                subprocess.Popen(["xdg-open", output_dir])
+        except Exception as e:
+            QMessageBox.critical(self, "RTC-Tools", f"Could not open folder:\n{str(e)}")
+
+    def _show_final_result(self):
+        """Opens output/figures/final_results.html in default web browser."""
+        import webbrowser
+
+        _, model_dir, _ = self.get_current_model_context_for_ui()
+        if not model_dir:
+            return
+
+        html_path = os.path.join(model_dir, "output", "figures", "final_results.html")
+        if not os.path.exists(html_path):
+            QMessageBox.information(
+                self,
+                "Final Result Missing",
+                f"File 'final_results.html' was not found at:\n'{html_path}'"
+            )
+            return
+
+        webbrowser.open(f"file:///{os.path.abspath(html_path)}")
