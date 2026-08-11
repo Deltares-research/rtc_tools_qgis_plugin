@@ -16,8 +16,11 @@ from qgis.PyQt.QtWidgets import (
     QScrollArea,
     QInputDialog,
     QLineEdit,
+    QDialog,
+    QDialogButtonBox,
+    QTextEdit,
 )
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
 from qgis.core import Qgis
 
 from .element_dialog import ElementDialog
@@ -47,6 +50,37 @@ class CollapsibleGroupBox(QGroupBox):
 
     def _on_toggled(self, checked):
         self.content_widget.setVisible(checked)
+
+
+class ModelRunnerThread(QThread):
+    """Background worker thread to run RTC-Tools model without freezing QGIS UI."""
+
+    finished_signal = pyqtSignal(int)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, python_exec, py_file_path, model_dir, log_file_path, run_env, parent=None):
+        super().__init__(parent)
+        self.python_exec = python_exec
+        self.py_file_path = py_file_path
+        self.model_dir = model_dir
+        self.log_file_path = log_file_path
+        self.run_env = run_env
+
+    def run(self):
+        import subprocess
+        try:
+            with open(self.log_file_path, "w", encoding="utf-8") as log_f:
+                process = subprocess.Popen(
+                    [self.python_exec, self.py_file_path],
+                    cwd=self.model_dir,
+                    env=self.run_env,
+                    stdout=log_f,
+                    stderr=subprocess.STDOUT
+                )
+                process.wait()
+            self.finished_signal.emit(process.returncode)
+        except Exception as e:
+            self.error_signal.emit(str(e))
 
 
 class RTCToolsDockWidget(QDockWidget):
@@ -930,7 +964,7 @@ class RTCToolsDockWidget(QDockWidget):
             )
             return
 
-        # 7. Execute python source file and log output
+        # 7. Execute python source file in background thread and log output
         python_exec = self._get_active_python_executable()
         log_file_path = os.path.join(output_dir, "rtc_tools_log.txt")
 
@@ -952,18 +986,24 @@ class RTCToolsDockWidget(QDockWidget):
             duration=4
         )
 
-        try:
-            with open(log_file_path, "w", encoding="utf-8") as log_f:
-                process = subprocess.Popen(
-                    [python_exec, py_file_path],
-                    cwd=model_dir,
-                    env=run_env,
-                    stdout=log_f,
-                    stderr=subprocess.STDOUT
-                )
-                process.wait()
+        # Disable Run button while running
+        self.btn_run_rtc.setEnabled(False)
+        self.btn_run_rtc.setText("⏳ Running Model...")
 
-            if process.returncode == 0:
+        self.runner_thread = ModelRunnerThread(
+            python_exec=python_exec,
+            py_file_path=py_file_path,
+            model_dir=model_dir,
+            log_file_path=log_file_path,
+            run_env=run_env,
+            parent=self
+        )
+
+        def on_finished(returncode):
+            self.btn_run_rtc.setEnabled(True)
+            self.btn_run_rtc.setText("▶ Run RTC-Tools Model")
+
+            if returncode == 0:
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Model '{model_name}' execution completed successfully!",
@@ -974,18 +1014,24 @@ class RTCToolsDockWidget(QDockWidget):
                 QMessageBox.warning(
                     self,
                     "Execution Error",
-                    f"Model execution exited with code {process.returncode}.\n"
+                    f"Model execution exited with code {returncode}.\n"
                     "Click 'Log Messages' to view the log file."
                 )
+            self._update_run_buttons_state()
 
-        except Exception as e:
+        def on_error(err_msg):
+            self.btn_run_rtc.setEnabled(True)
+            self.btn_run_rtc.setText("▶ Run RTC-Tools Model")
             QMessageBox.critical(
                 self,
                 "Execution Failed",
-                f"Failed to launch Python execution using '{python_exec}':\n{str(e)}"
+                f"Failed to launch Python execution using '{python_exec}':\n{err_msg}"
             )
+            self._update_run_buttons_state()
 
-        self._update_run_buttons_state()
+        self.runner_thread.finished_signal.connect(on_finished)
+        self.runner_thread.error_signal.connect(on_error)
+        self.runner_thread.start()
 
     def _show_log_messages(self):
         """Displays the contents of rtc_tools_log.txt in a scrollable message box."""
