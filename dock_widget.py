@@ -14,6 +14,8 @@ from qgis.PyQt.QtWidgets import (
     QMessageBox,
     QLabel,
     QScrollArea,
+    QInputDialog,
+    QLineEdit,
 )
 from qgis.PyQt.QtCore import Qt
 from qgis.core import Qgis
@@ -167,6 +169,11 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_export_mo.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_export_mo.clicked.connect(self._export_modelica)
         layout_export.addWidget(self.btn_export_mo)
+
+        self.btn_construct_rtc = QPushButton("🚀 Construct RTC-Tools Model...")
+        self.btn_construct_rtc.setStyleSheet("font-weight: bold; padding: 6px;")
+        self.btn_construct_rtc.clicked.connect(self._construct_rtc_tools_model)
+        layout_export.addWidget(self.btn_construct_rtc)
 
         layout.addWidget(grp_export)
 
@@ -421,6 +428,52 @@ class RTCToolsDockWidget(QDockWidget):
                     level=Qgis.MessageLevel.Success,
                     duration=5
                 )
+
+    def _construct_rtc_tools_model(self):
+        """Asks user for RTC-Tools model name and save location, then constructs full project directory structure."""
+        elements = self.model_manager.get_all_elements()
+        if not elements:
+            QMessageBox.warning(self, "RTC-Tools", "No elements in the model to export.")
+            return
+
+        is_valid, issues = self.model_manager.validate_model()
+        if not is_valid:
+            issue_text = "\n".join([f"• {issue}" for issue in issues])
+            reply = QMessageBox.question(
+                self,
+                "Validation Warnings Detected",
+                f"The model has the following validation issues:\n\n{issue_text}\n\nDo you still want to construct the RTC-Tools model structure anyway?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
+        model_name, ok = QInputDialog.getText(
+            self,
+            "RTC-Tools Model Name",
+            "Enter the RTC-Tools model name:",
+            QLineEdit.Normal,
+            "rtc_model"
+        )
+        if not ok or not model_name.strip():
+            return
+        model_name = model_name.strip()
+
+        save_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Select Location for Saving RTC-Tools Model",
+            os.path.expanduser("~")
+        )
+        if not save_dir:
+            return
+
+        if self.model_manager.construct_rtc_tools_model(save_dir, model_name):
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                f"RTC-Tools model '{model_name}' constructed successfully in '{save_dir}'",
+                level=Qgis.MessageLevel.Success,
+                duration=5
+            )
 
     def _edit_goal_table(self):
         """Opens the Goal Table Editor dialog."""

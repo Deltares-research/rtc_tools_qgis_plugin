@@ -1025,3 +1025,75 @@ class ModelManager(QObject):
             f.write(mo_content)
 
         return True
+
+    def construct_rtc_tools_model(self, save_dir, model_name):
+        """Constructs a complete RTC-Tools model directory structure inside save_dir:
+        1. Saves <model_name>.json in save_dir.
+        2. Creates folder <model_name> inside save_dir.
+        3. Creates subfolders 'input', 'output', 'model', and 'src' inside <model_name>.
+        4. Saves goal_table.csv inside <model_name>/input/.
+        5. Generates <model_name>.mo inside <model_name>/model/.
+        """
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir, exist_ok=True)
+
+        # 1. Save JSON file next to the model folder
+        json_file_path = os.path.join(save_dir, f"{model_name}.json")
+        self.export_to_json(json_file_path)
+
+        # 2. Create model directory and subdirectories
+        model_dir = os.path.join(save_dir, model_name)
+        input_dir = os.path.join(model_dir, "input")
+        output_dir = os.path.join(model_dir, "output")
+        model_sub_dir = os.path.join(model_dir, "model")
+        src_dir = os.path.join(model_dir, "src")
+
+        os.makedirs(input_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(model_sub_dir, exist_ok=True)
+        os.makedirs(src_dir, exist_ok=True)
+
+        # 3. Save goal_table.csv in input/
+        goal_csv_path = os.path.join(input_dir, "goal_table.csv")
+        self.export_goals_to_csv(goal_csv_path)
+
+        # 4. Save Modelica file in model/
+        mo_file_path = os.path.join(model_sub_dir, f"{model_name}.mo")
+        self.export_to_modelica(mo_file_path, model_name=model_name)
+
+        # 5. Create Python source file in src/<model_name>.py
+        py_file_path = os.path.join(src_dir, f"{model_name}.py")
+        py_content = f"""from rtctools.optimization.collocated_integrated_optimization_problem \\
+    import CollocatedIntegratedOptimizationProblem
+from rtctools.optimization.goal_programming_mixin \\
+    import GoalProgrammingMixin, Goal, StateGoal
+from rtctools.optimization.modelica_mixin import ModelicaMixin
+from rtctools_interface.optimization.goal_generator_mixin import GoalGeneratorMixin
+from rtctools_interface.optimization.plot_goals_mixin import PlotMixin
+from rtc_fews_io import FewsIOMixin
+from rtctools_diagnostics.export_results import ExportResultsEachPriorityMixin
+from rtctools.util import run_optimization_problem 
+import logging
+
+logger = logging.getLogger("rtctools")
+
+class {model_name}(
+    ExportResultsEachPriorityMixin,
+    PlotMixin,
+    GoalGeneratorMixin, 
+    GoalProgrammingMixin, 
+    FewsIOMixin,
+    ModelicaMixin,
+    CollocatedIntegratedOptimizationProblem
+    ):
+    csv_equidistant = False
+    plot_max_rows = 4
+
+
+if __name__ == "__main__":
+    run_optimization_problem({model_name}, log_level=logging.INFO)
+"""
+        with open(py_file_path, "w", encoding="utf-8") as f:
+            f.write(py_content)
+
+        return True

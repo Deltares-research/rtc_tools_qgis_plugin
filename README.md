@@ -10,6 +10,12 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - `Reservoir` (1 inflow, 1 outflow, diamond symbol; optional `Minimum`, `Maximum`, and `Nominal` parameters)
   - `Node` (junction point, circle symbol)
   - `Branch` (thick line connecting upstream element to downstream element)
+- **Full RTC-Tools Model Package Construction**: Automatically scaffold complete RTC-Tools model project directory structures:
+  - `<ModelName>.json` (JSON model file)
+  - `<ModelName>/input/goal_table.csv` (goal table)
+  - `<ModelName>/model/<ModelName>.mo` (Modelica file)
+  - `<ModelName>/src/<ModelName>.py` (Python optimization runner script)
+  - `<ModelName>/output/` (empty output folder)
 - **Modelica File Generation**: Construct RTC-Tools compatible Modelica (`*.mo`) files complete with:
   - Element declarations (`Node`, `Reservoir`, `Inflow`, `Terminal`, `Branch`)
   - Reservoir decision variables (`Q_turbine`, `Q_spill`) and state/flow outputs (`V`, `Q_out`)
