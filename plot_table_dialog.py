@@ -35,9 +35,22 @@ class PlotTableDialog(QDialog):
 
         self.plots = [dict(p) for p in (plots or [])]
         self.model_manager = model_manager
+        self.suggested_vars = self._get_suggested_variables()
+        self.suggested_goal_ids = self._get_suggested_goal_ids()
 
         self._init_ui()
         self._load_plots_to_table()
+
+    def _get_suggested_variables(self):
+        if self.model_manager and hasattr(self.model_manager, "get_suggested_state_variables"):
+            return self.model_manager.get_suggested_state_variables()
+        return []
+
+    def _get_suggested_goal_ids(self):
+        if self.model_manager and hasattr(self.model_manager, "get_goals"):
+            goals = self.model_manager.get_goals()
+            return [str(g.get("id")).strip() for g in goals if g and g.get("id")]
+        return []
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -95,19 +108,42 @@ class PlotTableDialog(QDialog):
         for col_idx, col_name in enumerate(PLOT_COLUMNS):
             val = str(plot_data.get(col_name, "") if plot_data.get(col_name) is not None else "")
 
-            if col_name == "specified_in":
+            if col_name == "id":
+                combo = QComboBox()
+                combo.setEditable(True)
+                for gid in self.suggested_goal_ids:
+                    combo.addItem(gid)
+                if val:
+                    if combo.findText(val) < 0:
+                        combo.addItem(val)
+                    combo.setCurrentText(val)
+                elif self.suggested_goal_ids:
+                    combo.setCurrentText(self.suggested_goal_ids[0])
+                self.table.setCellWidget(row, col_idx, combo)
+            elif col_name == "specified_in":
                 combo = QComboBox()
                 combo.addItem("goal_generator")
                 combo.setCurrentText("goal_generator")
+                self.table.setCellWidget(row, col_idx, combo)
+            elif col_name in ["variables_style_1", "variables_style_2"]:
+                combo = QComboBox()
+                combo.setEditable(True)
+                combo.addItem("")
+                for st in self.suggested_vars:
+                    combo.addItem(st)
+                if val:
+                    if combo.findText(val) < 0:
+                        combo.addItem(val)
+                    combo.setCurrentText(val)
                 self.table.setCellWidget(row, col_idx, combo)
             else:
                 item = QTableWidgetItem(val)
                 self.table.setItem(row, col_idx, item)
 
     def _add_plot_row(self):
-        row_count = self.table.rowCount() + 1
+        default_id = self.suggested_goal_ids[0] if self.suggested_goal_ids else f"Plot_{self.table.rowCount() + 1}"
         new_plot = {
-            "id": f"Plot_{row_count}",
+            "id": default_id,
             "y_axis_title": "",
             "variables_style_1": "",
             "variables_style_2": "",
@@ -178,19 +214,19 @@ class PlotTableDialog(QDialog):
         for row in range(self.table.rowCount()):
             plot = {}
             for col_idx, col_name in enumerate(PLOT_COLUMNS):
-                if col_name == "specified_in":
+                if col_name in ["id", "specified_in", "variables_style_1", "variables_style_2"]:
                     widget = self.table.cellWidget(row, col_idx)
-                    plot[col_name] = widget.currentText().strip() if isinstance(widget, QComboBox) else "goal_generator"
+                    plot[col_name] = widget.currentText().strip() if isinstance(widget, QComboBox) else ""
                 else:
                     item = self.table.item(row, col_idx)
                     plot[col_name] = item.text().strip() if item else ""
 
             plot_id = plot.get("id", "")
             if not plot_id:
-                return [], False, f"Row {row + 1} has an empty 'id'. All plot rows must have a unique ID."
+                return [], False, f"Row {row + 1} has an empty 'id'. All plot rows must select or specify a unique Goal ID."
 
             if plot_id in seen_ids:
-                return [], False, f"Duplicate ID '{plot_id}' found at row {row + 1}. All plot IDs must be unique."
+                return [], False, f"Duplicate Goal ID '{plot_id}' found at row {row + 1}. All plot IDs must be unique."
 
             seen_ids.add(plot_id)
             plot["specified_in"] = "goal_generator"

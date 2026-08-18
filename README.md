@@ -42,6 +42,8 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - Full preservation of goal configuration inside exported and imported JSON model files
 - **Plot Table Configuration**:
   - Interactive Plot Table editor supporting columns: `id`, `y_axis_title`, `variables_style_1`, `variables_style_2`, `custom_title`, `specified_in`
+  - Auto-suggests Goal IDs from the Optimization Goal Table in a drop-down menu for the `id` column
+  - Auto-suggests model state variables in drop-down menus for `variables_style_1` and `variables_style_2`
   - Validates unique `id` constraints and fixes `specified_in` to `goal_generator`
   - Export & Import plots to/from RTC-Tools standard CSV format (`plot_table.csv`)
   - Full preservation of plot configuration inside exported and imported JSON model files
