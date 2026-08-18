@@ -41,6 +41,7 @@ class ModelManager(QObject):
         self.plots = []
         self.rtc_data_config = []
         self.rtc_parameter_config = []
+        self.timeseries_import = {}
         self.last_saved_json_path = None
         self._element_counter = 0
 
@@ -674,6 +675,7 @@ class ModelManager(QObject):
         self.plots = []
         self.rtc_data_config = []
         self.rtc_parameter_config = []
+        self.timeseries_import = {}
         self._element_counter = 0
         self.modelCleared.emit()
 
@@ -708,6 +710,14 @@ class ModelManager(QObject):
     def set_rtc_parameter_config(self, parameters):
         """Sets list of rtcParameterConfig parameter dictionaries."""
         self.rtc_parameter_config = [dict(p) for p in (parameters or [])]
+
+    def get_timeseries_import(self):
+        """Returns timeseries_import dictionary configuration."""
+        return self.timeseries_import
+
+    def set_timeseries_import(self, ts_data):
+        """Sets timeseries_import dictionary configuration."""
+        self.timeseries_import = dict(ts_data or {})
 
     def get_suggested_state_variables(self):
         """Returns list of suggested Modelica state variable names derived from point elements."""
@@ -956,8 +966,161 @@ class ModelManager(QObject):
         self.rtc_parameter_config = imported
         return True
 
+    def export_timeseries_import_to_xml(self, file_path):
+        """Exports timeseries_import data to an XML file."""
+        import xml.etree.ElementTree as ET
+        from xml.dom import minidom
+
+        data = self.timeseries_import or {}
+
+        root = ET.Element("TimeSeries", {
+            "xmlns": "http://www.wldelft.nl/fews/PI",
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xsi:schemaLocation": "http://www.wldelft.nl/fews/PI http://fews.wldelft.nl/schemas/version1.0/pi-schemas/pi_timeseries.xsd",
+            "version": "1.5"
+        })
+
+        tz_elem = ET.SubElement(root, "timeZone")
+        tz_elem.text = str(data.get("timeZone", "-6.0"))
+
+        dts = data.get("datetimes", [])
+
+        for s in data.get("series", []):
+            s_elem = ET.SubElement(root, "series")
+            hdr = ET.SubElement(s_elem, "header")
+
+            ET.SubElement(hdr, "type").text = "instantaneous"
+            ET.SubElement(hdr, "locationId").text = str(s.get("locationId", ""))
+            ET.SubElement(hdr, "parameterId").text = str(s.get("parameterId", ""))
+
+            if data.get("timeStepMode") == "equidistant":
+                ET.SubElement(hdr, "timeStep", {
+                    "unit": str(data.get("timeStepUnit", "second")),
+                    "multiplier": str(data.get("timeStepMultiplier", "600"))
+                })
+            else:
+                ET.SubElement(hdr, "timeStep", {"unit": "nonequidistant"})
+
+            start_d, start_t = ("2000-01-01", "00:00:00")
+            end_d, end_t = ("2000-01-01", "00:00:00")
+
+            s_events = s.get("events", {})
+            active_dts = [dt for dt in dts if dt in s_events]
+
+            if active_dts:
+                sorted_active = sorted(active_dts)
+                parts_start = sorted_active[0].split(" ")
+                start_d, start_t = parts_start[0], parts_start[1] if len(parts_start) > 1 else "00:00:00"
+
+                parts_end = sorted_active[-1].split(" ")
+                end_d, end_t = parts_end[0], parts_end[1] if len(parts_end) > 1 else "00:00:00"
+
+            ET.SubElement(hdr, "startDate", {"date": start_d, "time": start_t})
+            ET.SubElement(hdr, "endDate", {"date": end_d, "time": end_t})
+            ET.SubElement(hdr, "missVal").text = str(s.get("missVal", data.get("missVal", "-999.0")))
+            ET.SubElement(hdr, "units").text = str(s.get("units", "m³/s"))
+
+            for dt in dts:
+                if dt in s_events:
+                    val_str = str(s_events[dt])
+                    parts = dt.split(" ")
+                    d_str = parts[0]
+                    t_str = parts[1] if len(parts) > 1 else "00:00:00"
+                    ET.SubElement(s_elem, "event", {
+                        "date": d_str,
+                        "time": t_str,
+                        "value": val_str,
+                        "flag": "0"
+                    })
+
+        xml_str = ET.tostring(root, encoding="utf-8")
+        parsed_dom = minidom.parseString(xml_str)
+        pretty_xml = parsed_dom.toprettyxml(indent="\t", encoding="UTF-8").decode("utf-8")
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(pretty_xml)
+        return True
+
+    def import_timeseries_import_from_xml(self, file_path):
+        """Imports timeseries_import data from an XML file."""
+        import xml.etree.ElementTree as ET
+
+        if not os.path.exists(file_path):
+            return False
+
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+
+        tz_node = root.find("{*}timeZone")
+        tz = tz_node.text.strip() if tz_node is not None and tz_node.text else "-6.0"
+
+        all_dts = set()
+        imported_series = []
+
+        step_mode = "nonequidistant"
+        step_unit = "second"
+        step_mult = "600"
+
+        for s_elem in root.findall("{*}series"):
+            hdr = s_elem.find("{*}header")
+            if hdr is None:
+                continue
+
+            loc_node = hdr.find("{*}locationId")
+            param_node = hdr.find("{*}parameterId")
+            unit_node = hdr.find("{*}units")
+            miss_node = hdr.find("{*}missVal")
+
+            loc_id = loc_node.text.strip() if loc_node is not None and loc_node.text else ""
+            param_id = param_node.text.strip() if param_node is not None and param_node.text else ""
+            units = unit_node.text.strip() if unit_node is not None and unit_node.text else "m³/s"
+            miss_val = miss_node.text.strip() if miss_node is not None and miss_node.text else "-999.0"
+
+            var_id = f"{loc_id}_{param_id}" if loc_id and param_id else (loc_id or param_id)
+            for m in self.rtc_data_config:
+                if m.get("locationId") == loc_id and m.get("parameterId") == param_id:
+                    var_id = m.get("id")
+                    break
+
+            step_node = hdr.find("{*}timeStep")
+            if step_node is not None:
+                if step_node.get("unit") != "nonequidistant":
+                    step_mode = "equidistant"
+                    step_unit = step_node.get("unit", "second")
+                    step_mult = step_node.get("multiplier", "600")
+
+            events = {}
+            for ev in s_elem.findall("{*}event"):
+                d = ev.get("date", "")
+                t = ev.get("time", "")
+                v = ev.get("value", "")
+                if d and t:
+                    dt_key = f"{d} {t}"
+                    events[dt_key] = v
+                    all_dts.add(dt_key)
+
+            imported_series.append({
+                "variable_id": var_id,
+                "locationId": loc_id,
+                "parameterId": param_id,
+                "units": units,
+                "missVal": miss_val,
+                "events": events
+            })
+
+        self.timeseries_import = {
+            "timeZone": tz,
+            "timeStepMode": step_mode,
+            "timeStepUnit": step_unit,
+            "timeStepMultiplier": step_mult,
+            "missVal": "-999.0",
+            "datetimes": sorted(list(all_dts)),
+            "series": imported_series
+        }
+        return True
+
     def export_to_json(self, file_path):
-        """Exports point elements, branch connections, goal table, plot table, rtcDataConfig, and rtcParameterConfig mappings to a JSON file."""
+        """Exports point elements, branch connections, goal table, plot table, rtcDataConfig, rtcParameterConfig, and timeseries_import mappings to a JSON file."""
         crs_str = self.nodes_layer.crs().authid() if self.nodes_layer else self.get_canvas_crs()
         elements = self.get_all_elements()
 
@@ -970,7 +1133,8 @@ class ModelManager(QObject):
             "goals": self.goals,
             "plots": self.plots,
             "rtc_data_config": self.rtc_data_config,
-            "rtc_parameter_config": self.rtc_parameter_config
+            "rtc_parameter_config": self.rtc_parameter_config,
+            "timeseries_import": self.timeseries_import
         }
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -981,7 +1145,7 @@ class ModelManager(QObject):
         return True
 
     def import_from_json(self, file_path):
-        """Imports point elements, branch connections, goal table, plot table, rtcDataConfig, and rtcParameterConfig mappings from a JSON file."""
+        """Imports point elements, branch connections, goal table, plot table, rtcDataConfig, rtcParameterConfig, and timeseries_import mappings from a JSON file."""
         if not os.path.exists(file_path):
             return False
 
@@ -994,6 +1158,7 @@ class ModelManager(QObject):
         self.plots = data.get("plots", [])
         self.rtc_data_config = data.get("rtc_data_config", [])
         self.rtc_parameter_config = data.get("rtc_parameter_config", [])
+        self.timeseries_import = data.get("timeseries_import", {})
 
         self.last_saved_json_path = os.path.abspath(file_path)
 
@@ -1317,7 +1482,7 @@ class ModelManager(QObject):
         os.makedirs(model_sub_dir, exist_ok=True)
         os.makedirs(src_dir, exist_ok=True)
 
-        # 3. Save goal_table.csv, plot_table.csv, rtcDataConfig.xml, and rtcParameterConfig.xml in input/
+        # 3. Save goal_table.csv, plot_table.csv, rtcDataConfig.xml, rtcParameterConfig.xml, and timeseries_import.xml in input/
         goal_csv_path = os.path.join(input_dir, "goal_table.csv")
         self.export_goals_to_csv(goal_csv_path)
 
@@ -1329,6 +1494,9 @@ class ModelManager(QObject):
 
         param_config_xml_path = os.path.join(input_dir, "rtcParameterConfig.xml")
         self.export_rtc_parameter_config_to_xml(param_config_xml_path)
+
+        ts_import_xml_path = os.path.join(input_dir, "timeseries_import.xml")
+        self.export_timeseries_import_to_xml(ts_import_xml_path)
 
         # 4. Save Modelica file in model/
         mo_file_path = os.path.join(model_sub_dir, f"{model_name}.mo")

@@ -16,6 +16,7 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - `<ModelName>/input/plot_table.csv` (plot configuration table)
   - `<ModelName>/input/rtcDataConfig.xml` (timeSeries mapping XML)
   - `<ModelName>/input/rtcParameterConfig.xml` (parameters XML)
+  - `<ModelName>/input/timeseries_import.xml` (timeSeries event data XML)
   - `<ModelName>/model/<ModelName>.mo` (Modelica file)
   - `<ModelName>/src/<ModelName>.py` (Python optimization runner script)
   - `<ModelName>/output/` (empty output folder)
@@ -59,6 +60,13 @@ A QGIS plugin for constructing, editing, and exporting RTC-Tools model network e
   - Comprehensive pre-flight checks (JSON saved, project folders `input`, `model`, `src`, `output`, configuration CSVs/XMLs, `<ModelName>.mo`, `<ModelName>.py`, and `timeseries_import.xml`).
   - Runs optimization script and redirects logs to `output/rtc_tools_log.txt`.
   - Result view buttons: **Log Messages**, **Show Result Folder**, and **Show Final Result** (`output/figures/final_results.html`).
+- **TimeSeries Import Data (`timeseries_import.xml`)**:
+  - Tabbed editor for defining simulation TimeSteps (`datetimes`) and TimeSeries variable event data.
+  - Supports both **nonequidistant** and **equidistant** timeStep modes (`unit` and `multiplier`).
+  - Auto-suggests variable names and default `locationId`/`parameterId` headers from `rtcDataConfig.xml`.
+  - Event values can be edited directly or imported per-variable from CSV files.
+  - Export & Import definitions to/from FEWS `timeseries_import.xml`.
+  - Full preservation of timeseries import configuration inside exported and imported JSON model files.
 - **Property Management**: Edit properties, names, and custom key-value metadata.
 - **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 

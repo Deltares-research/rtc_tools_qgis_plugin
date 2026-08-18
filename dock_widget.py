@@ -28,6 +28,7 @@ from .goal_table_dialog import GoalTableDialog
 from .plot_table_dialog import PlotTableDialog
 from .rtc_data_config_dialog import RtcDataConfigDialog
 from .rtc_parameter_config_dialog import RtcParameterConfigDialog
+from .timeseries_import_dialog import TimeseriesImportDialog
 
 class CollapsibleGroupBox(QGroupBox):
     """A QGroupBox that can expand and collapse its content area when toggled via its checkbox."""
@@ -244,7 +245,27 @@ class RTCToolsDockWidget(QDockWidget):
 
         layout.addWidget(grp_param_config)
 
-        # --- 7. Model Run Group ---
+        # --- 7. TimeSeries Import Group ---
+        grp_ts_import = CollapsibleGroupBox("TimeSeries Import Data", expanded=False)
+        layout_ts_import = grp_ts_import.content_layout
+
+        self.btn_edit_ts_import = QPushButton("📅 Edit TimeSeries Import Data...")
+        self.btn_edit_ts_import.setStyleSheet("padding: 5px;")
+        self.btn_edit_ts_import.clicked.connect(self._edit_timeseries_import)
+        layout_ts_import.addWidget(self.btn_edit_ts_import)
+
+        h_layout_ts_xml = QHBoxLayout()
+        self.btn_export_ts_xml = QPushButton("📊 Export XML...")
+        self.btn_export_ts_xml.clicked.connect(self._export_timeseries_import_xml)
+        self.btn_import_ts_xml = QPushButton("📂 Import XML...")
+        self.btn_import_ts_xml.clicked.connect(self._import_timeseries_import_xml)
+        h_layout_ts_xml.addWidget(self.btn_export_ts_xml)
+        h_layout_ts_xml.addWidget(self.btn_import_ts_xml)
+        layout_ts_import.addLayout(h_layout_ts_xml)
+
+        layout.addWidget(grp_ts_import)
+
+        # --- 8. Model Run Group ---
         grp_run = CollapsibleGroupBox("Model Run", expanded=False)
         layout_run = grp_run.content_layout
 
@@ -815,6 +836,60 @@ class RTCToolsDockWidget(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Imported {len(self.model_manager.get_rtc_parameter_config())} parameters from '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _edit_timeseries_import(self):
+        """Opens the timeseries_import Editor dialog."""
+        current_data = self.model_manager.get_timeseries_import()
+        dlg = TimeseriesImportDialog(data=current_data, model_manager=self.model_manager, parent=self)
+        if dlg.exec_() == TimeseriesImportDialog.Accepted:
+            updated_data = dlg.get_updated_data()
+            self.model_manager.set_timeseries_import(updated_data)
+            series_count = len(updated_data.get("series", []))
+            dt_count = len(updated_data.get("datetimes", []))
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                f"timeseries_import updated ({series_count} series across {dt_count} timeSteps)",
+                level=Qgis.MessageLevel.Success,
+                duration=3
+            )
+
+    def _export_timeseries_import_xml(self):
+        """Exports the timeseries_import configuration to an XML file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export timeseries_import XML",
+            os.path.expanduser("~/timeseries_import.xml"),
+            "XML Files (*.xml);;All Files (*)"
+        )
+        if file_path:
+            if not file_path.lower().endswith(".xml"):
+                file_path += ".xml"
+
+            if self.model_manager.export_timeseries_import_to_xml(file_path):
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"timeseries_import XML exported successfully to '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
+    def _import_timeseries_import_xml(self):
+        """Imports the timeseries_import configuration from an XML file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import timeseries_import XML",
+            os.path.expanduser("~"),
+            "XML Files (*.xml);;All Files (*)"
+        )
+        if file_path:
+            if self.model_manager.import_timeseries_import_from_xml(file_path):
+                ts_data = self.model_manager.get_timeseries_import()
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Imported {len(ts_data.get('series', []))} series from '{file_path}'",
                     level=Qgis.MessageLevel.Success,
                     duration=5
                 )
