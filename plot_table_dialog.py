@@ -144,7 +144,7 @@ class PlotTableDialog(QDialog):
         default_id = self.suggested_goal_ids[0] if self.suggested_goal_ids else f"Plot_{self.table.rowCount() + 1}"
         new_plot = {
             "id": default_id,
-            "y_axis_title": "",
+            "y_axis_title": "Value",
             "variables_style_1": "",
             "variables_style_2": "",
             "custom_title": "",
@@ -227,6 +227,9 @@ class PlotTableDialog(QDialog):
 
             if plot_id in seen_ids:
                 return [], False, f"Duplicate Goal ID '{plot_id}' found at row {row + 1}. All plot IDs must be unique."
+
+            if not plot.get("y_axis_title", "").strip():
+                return [], False, f"Row {row + 1} ('{plot_id}') has an empty 'y_axis_title'. The 'y_axis_title' column must not be left empty."
 
             seen_ids.add(plot_id)
             plot["specified_in"] = "goal_generator"

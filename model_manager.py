@@ -441,6 +441,12 @@ class ModelManager(QObject):
                 if outputs != 1:
                     issues.append(f"Node '{pname}' ({pid}) must have exactly 1 output (found {outputs}).")
 
+        # 3. Validate plot configuration entries
+        for idx, plot in enumerate(self.plots, 1):
+            plot_id = plot.get("id", f"Plot {idx}")
+            if not plot.get("y_axis_title", "").strip():
+                issues.append(f"Plot entry '{plot_id}' has an empty 'y_axis_title'. 'y_axis_title' must not be left empty.")
+
         is_valid = len(issues) == 0
         return is_valid, issues
 
