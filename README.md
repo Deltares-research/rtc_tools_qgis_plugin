@@ -1,6 +1,16 @@
 # RTC-Tools QGIS Plugin (`RTC-Tools-QGIS-Plugin`)
 
-A QGIS plugin for constructing, editing, and exporting RTC-Tools model network elements directly from the QGIS map canvas.
+A QGIS plugin providing a graphical user interface (GUI) for constructing, editing, and exporting [RTC-Tools](https://rtc-tools.readthedocs.io/) models directly from the QGIS map canvas.
+
+## About RTC-Tools
+
+[RTC-Tools](https://rtc-tools.readthedocs.io/) (Real-Time Control Tools) is an open-source optimization and simulation package for operational water management and multi-energy systems, hosted under [LF Energy](https://www.lfenergy.org/) (a [Linux Foundation](https://www.linuxfoundation.org/) project) and originally developed by [Deltares](https://www.deltares.nl/). It enables model-predictive control, rule-based control, and decision support using Modelica and Python.
+
+This QGIS plugin provides a spatial and visual interface (GUI) to:
+- Visually lay out water network topologies (inflows, reservoirs, nodes, terminals, and branches).
+- Configure optimization goals, plot definitions, and FEWS data/parameter mappings.
+- Automatically generate the complete directory structure, Modelica model (`*.mo`), and Python runner script for RTC-Tools simulations.
+- Run optimizations and view results directly from QGIS.
 
 ## Features
 
