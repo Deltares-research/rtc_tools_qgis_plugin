@@ -88,6 +88,7 @@ RTC-Tools-QGIS-Plugin/
 ├── rtc_data_config_dialog.py     # FEWS rtcDataConfig editor dialog
 ├── rtc_parameter_config_dialog.py# FEWS rtcParameterConfig editor dialog
 ├── icon.png                      # Plugin toolbar icon
+├── LICENSE                       # MIT License
 └── README.md                     # Documentation
 ```
 
@@ -152,3 +153,7 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
 4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
 5. Click **🔍 Validate Model** to verify all input/output constraints.
 6. Edit, delete, or export your model to JSON via **💾 Save Model to JSON...**.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

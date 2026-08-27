@@ -8,5 +8,6 @@ email=farid.alavi@deltares.nl
 about=A QGIS plugin to visually place RTC-Tools model elements on the map canvas, manage their properties, and export the constructed model to JSON format.
 tracker=https://github.com/Deltares-research/rtc_tools_qgis_plugin/issues
 repository=https://github.com/Deltares-research/rtc_tools_qgis_plugin
+license=MIT
 hasProcessingProvider=no
 plugin_type=normal
