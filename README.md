@@ -158,11 +158,17 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
 ## Usage
 
 1. Open the **RTC-Tools Model Builder** dock panel.
-2. Choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
+2. Under"**Add Elements**, choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
 3. Click **📍 Add Element on Map** and click canvas to place elements.
 4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
-5. Click **🔍 Validate Model** to verify all input/output constraints.
-6. Edit, delete, or export your model to JSON via **💾 Save Model to JSON...**.
+5. Under **Model File**, click **🔍 Validate Model** to verify all input/output constraints.
+6. Under **Model Elements**, edit or delete the model elements in the table and specify bounds.
+7. Specify Goals and the corresponding plot configuration in the corresponding sub menu. 
+8. Fill in time series values under **TimeSeries Import Data** and export the time series data. 
+9. Save your model to JSON via **💾 Save Model to JSON...**.
+10. **Construct RTC-Tools Model** creates a complete RTC-Tools folder structure. 
+11. Export the time series import data into this folder structure with **Export XML...** under **TimeSeries Import Data** into this structure.
+12. Select a Python Environment under **Model Run** and run the RTC-Tools model with **Run RTC-Tools Model**
 
 ## License
 
