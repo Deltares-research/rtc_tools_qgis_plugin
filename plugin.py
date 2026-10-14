@@ -4,7 +4,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
 from .model_manager import ModelManager
-from .map_tool import AddElementMapTool
+from .map_tool import AddElementMapTool, MoveNodeMapTool
 from .dock_widget import RTCToolsDockWidget
 
 class RTCToolsPlugin:
@@ -18,6 +18,7 @@ class RTCToolsPlugin:
         self.dock_widget = None
         self.model_manager = None
         self.map_tool = None
+        self.move_tool = None
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside QGIS GUI."""
@@ -35,12 +36,17 @@ class RTCToolsPlugin:
         # Initialize model components
         self.model_manager = ModelManager(self.iface)
         
-        # Initialize map tool
+        # Initialize map tools
         self.map_tool = AddElementMapTool(
             self.iface.mapCanvas(),
             self.model_manager,
             iface=self.iface,
             element_type_callback=self._get_active_element_type
+        )
+        self.move_tool = MoveNodeMapTool(
+            self.iface.mapCanvas(),
+            self.model_manager,
+            iface=self.iface
         )
 
         # Initialize dock widget
@@ -48,6 +54,7 @@ class RTCToolsPlugin:
             self.iface,
             self.model_manager,
             self.map_tool,
+            move_tool=self.move_tool,
             parent=self.iface.mainWindow()
         )
         self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget)
@@ -73,6 +80,10 @@ class RTCToolsPlugin:
         if self.map_tool:
             self.iface.mapCanvas().unsetMapTool(self.map_tool)
             self.map_tool = None
+
+        if self.move_tool:
+            self.iface.mapCanvas().unsetMapTool(self.move_tool)
+            self.move_tool = None
 
     def run(self):
         """Show and raise the RTC-Tools dock widget when the toolbar/menu item is clicked."""

@@ -25,6 +25,7 @@ class ModelManager(QObject):
     # Signals
     elementAdded = pyqtSignal(dict)
     elementUpdated = pyqtSignal(dict)
+    elementMoved = pyqtSignal(dict)
     elementRemoved = pyqtSignal(str)
     modelCleared = pyqtSignal()
     layerCreated = pyqtSignal(object)
@@ -475,8 +476,95 @@ class ModelManager(QObject):
 
         return nearest_elem
 
-    def update_element(self, element_id, new_name=None, new_type=None, new_properties=None):
-        """Updates attributes of an existing point or branch element by name/ID."""
+    def move_element(self, element_id, new_point):
+        """Moves an existing point element to a new location and updates connected branches.
+
+        Args:
+            element_id (str): Name or ID of the point element to move.
+            new_point (QgsPointXY or dict or tuple or list): The new coordinates.
+
+        Returns:
+            dict or None: Updated element data dictionary, or None if element not found.
+        """
+        if not self.nodes_layer or new_point is None:
+            return None
+
+        # Standardize new_point to QgsPointXY
+        if isinstance(new_point, QgsPointXY):
+            new_pt = new_point
+        elif isinstance(new_point, dict):
+            try:
+                new_pt = QgsPointXY(float(new_point["x"]), float(new_point["y"]))
+            except (KeyError, ValueError, TypeError):
+                return None
+        elif isinstance(new_point, (list, tuple)) and len(new_point) >= 2:
+            try:
+                new_pt = QgsPointXY(float(new_point[0]), float(new_point[1]))
+            except (ValueError, TypeError):
+                return None
+        else:
+            return None
+
+        target_feat = None
+        for feat in self.nodes_layer.getFeatures():
+            if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
+                target_feat = feat
+                break
+
+        if target_feat is None:
+            return None
+
+        actual_name = target_feat.attribute("name") or target_feat.attribute("id")
+
+        # 1. Update point geometry in nodes layer
+        new_geom = QgsGeometry.fromPointXY(new_pt)
+        self.nodes_layer.dataProvider().changeGeometryValues({target_feat.id(): new_geom})
+        self.nodes_layer.updateExtents()
+        self.nodes_layer.triggerRepaint()
+
+        # 2. Update connected branches in branches layer
+        if self.branches_layer:
+            branch_geom_updates = {}
+            for b_feat in self.branches_layer.getFeatures():
+                from_id = b_feat.attribute("from_element")
+                to_id = b_feat.attribute("to_element")
+
+                if from_id == actual_name or to_id == actual_name:
+                    if from_id == actual_name:
+                        pt_from = new_pt
+                    else:
+                        from_elem = self.get_element(from_id)
+                        pt_from = QgsPointXY(from_elem["location"]["x"], from_elem["location"]["y"]) if from_elem else None
+
+                    if to_id == actual_name:
+                        pt_to = new_pt
+                    else:
+                        to_elem = self.get_element(to_id)
+                        pt_to = QgsPointXY(to_elem["location"]["x"], to_elem["location"]["y"]) if to_elem else None
+
+                    if pt_from and pt_to:
+                        branch_geom_updates[b_feat.id()] = QgsGeometry.fromPolylineXY([pt_from, pt_to])
+
+            if branch_geom_updates:
+                self.branches_layer.dataProvider().changeGeometryValues(branch_geom_updates)
+                self.branches_layer.updateExtents()
+                self.branches_layer.triggerRepaint()
+
+        if self.iface and self.iface.mapCanvas():
+            self.iface.mapCanvas().refresh()
+
+        updated_data = self.get_element(actual_name)
+        if updated_data:
+            self.elementMoved.emit(updated_data)
+            self.elementUpdated.emit(updated_data)
+
+        return updated_data
+
+    def update_element(self, element_id, new_name=None, new_type=None, new_properties=None, new_location=None):
+        """Updates attributes and optionally location of an existing point or branch element by name/ID."""
+        if new_location is not None:
+            self.move_element(element_id, new_location)
+
         if new_name and new_name != element_id:
             if self.get_element(new_name):
                 return False  # Name collision

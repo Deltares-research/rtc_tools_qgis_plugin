@@ -43,9 +43,9 @@ class ElementDialog(QDialog):
         self.combo_type.currentTextChanged.connect(self._on_type_changed)
 
         self.txt_x = QLineEdit()
-        self.txt_x.setReadOnly(True)
+        self.txt_x.setPlaceholderText("X coordinate")
         self.txt_y = QLineEdit()
-        self.txt_y.setReadOnly(True)
+        self.txt_y.setPlaceholderText("Y coordinate")
 
         self.txt_from = QLineEdit()
         self.txt_from.setReadOnly(True)
@@ -258,12 +258,6 @@ class ElementDialog(QDialog):
             self.prop_table.setItem(row, 1, QTableWidgetItem(str(v)))
 
     def _add_prop_row(self):
-            row = self.prop_table.rowCount()
-            self.prop_table.insertRow(row)
-            self.prop_table.setItem(row, 0, QTableWidgetItem(str(k)))
-            self.prop_table.setItem(row, 1, QTableWidgetItem(str(v)))
-
-    def _add_prop_row(self):
         row = self.prop_table.rowCount()
         self.prop_table.insertRow(row)
         self.prop_table.setItem(row, 0, QTableWidgetItem("new_param"))
@@ -275,7 +269,7 @@ class ElementDialog(QDialog):
             self.prop_table.removeRow(current_row)
 
     def get_updated_data(self):
-        """Returns updated name, type, and properties dictionary."""
+        """Returns updated name, type, properties dictionary, and location."""
         name = self.txt_name.text().strip()
         elem_type = self.combo_type.currentText().strip()
 
@@ -344,8 +338,19 @@ class ElementDialog(QDialog):
                 if k and k not in managed_keys:
                     props[k] = v
 
-        return {
+        res = {
             "name": name or self.element_data.get("name"),
             "type": elem_type,
             "properties": props
         }
+
+        if elem_type != "Branch":
+            try:
+                x_val = float(self.txt_x.text().strip())
+                y_val = float(self.txt_y.text().strip())
+                res["location"] = {"x": x_val, "y": y_val}
+            except (ValueError, TypeError):
+                pass
+
+        return res
+
