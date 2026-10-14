@@ -496,7 +496,7 @@ class ModelManager(QObject):
 
         return nearest_elem
 
-    def move_element(self, element_id, new_point):
+    def move_element(self, element_id, new_point, _emit_updated=True):
         """Moves an existing point element to a new location and updates connected branches.
 
         Args:
@@ -600,7 +600,8 @@ class ModelManager(QObject):
         updated_data = self.get_element(actual_name)
         if updated_data:
             self.elementMoved.emit(updated_data)
-            self.elementUpdated.emit(updated_data)
+            if _emit_updated:
+                self.elementUpdated.emit(updated_data)
 
         return updated_data
 
@@ -611,6 +612,13 @@ class ModelManager(QObject):
         if not current_elem:
             return False
 
+        # Prevent converting a Branch into a point element or vice versa across geometry layers
+        current_is_branch = current_elem.get("type") == "Branch"
+        if new_type is not None:
+            new_is_branch = new_type == "Branch"
+            if current_is_branch != new_is_branch:
+                return False
+
         # 2. Validate name collisions before performing any modifications
         if new_name and new_name != element_id:
             if self.get_element(new_name):
@@ -618,7 +626,7 @@ class ModelManager(QObject):
 
         # 3. Apply location update if requested, propagating move failure
         if new_location is not None:
-            moved = self.move_element(element_id, new_location)
+            moved = self.move_element(element_id, new_location, _emit_updated=False)
             if moved is None:
                 return False
 

@@ -39,9 +39,15 @@ class ElementDialog(QDialog):
 
         self.txt_name = QLineEdit()
 
+        is_branch = self.element_data.get("type") == "Branch"
         self.combo_type = QComboBox()
-        for et in self.element_types:
-            self.combo_type.addItem(et)
+        if is_branch:
+            self.combo_type.addItem("Branch")
+            self.combo_type.setEnabled(False)
+        else:
+            for et in self.element_types:
+                if et != "Branch":
+                    self.combo_type.addItem(et)
         self.combo_type.currentTextChanged.connect(self._on_type_changed)
 
         self.txt_x = QLineEdit()
@@ -57,7 +63,6 @@ class ElementDialog(QDialog):
         form.addRow("Name:", self.txt_name)
         form.addRow("Type:", self.combo_type)
 
-        is_branch = self.element_data.get("type") == "Branch"
         if is_branch:
             form.addRow("Upstream (From):", self.txt_from)
             form.addRow("Downstream (To):", self.txt_to)

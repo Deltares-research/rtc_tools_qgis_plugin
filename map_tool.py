@@ -35,7 +35,15 @@ class AddElementMapTool(QgsMapToolEmitPoint):
         else:
             # Point element placement
             added_data = self.model_manager.add_element(click_pt, element_type=elem_type)
-            self.elementPlaced.emit(added_data)
+            if added_data:
+                self.elementPlaced.emit(added_data)
+            elif self.iface:
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Could not place {elem_type}: invalid coordinates.",
+                    level=Qgis.MessageLevel.Warning,
+                    duration=4
+                )
 
     def _handle_branch_click(self, click_pt):
         nearest_elem = self.model_manager.find_nearest_element(click_pt)

@@ -22,9 +22,9 @@ def main():
     if plugin_dir not in sys.path:
         sys.path.insert(0, plugin_dir)
 
-    # Initialize QGIS Application without GUI display
+    # Initialize GUI-enabled QGIS Application in offscreen mode for widget/canvas tests
     from qgis.core import QgsApplication
-    app = QgsApplication([], False)
+    app = QgsApplication([], True)
     app.initQgis()
 
     try:

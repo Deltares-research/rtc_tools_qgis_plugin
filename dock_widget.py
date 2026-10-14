@@ -87,7 +87,7 @@ class ModelRunnerThread(QThread):
 class RTCToolsDockWidget(QDockWidget):
     """Dockable panel for RTC-Tools model building and JSON export."""
 
-    def __init__(self, iface, model_manager, map_tool, move_tool=None, parent=None):
+    def __init__(self, iface, model_manager, map_tool, parent=None, move_tool=None):
         super().__init__("RTC-Tools Model Builder", parent)
         self.iface = iface
         self.model_manager = model_manager
@@ -356,8 +356,6 @@ class RTCToolsDockWidget(QDockWidget):
         # Connect model manager signals to refresh GUI automatically
         self.model_manager.elementAdded.connect(self._on_element_changed)
         self.model_manager.elementUpdated.connect(self._on_element_changed)
-        if hasattr(self.model_manager, "elementMoved"):
-            self.model_manager.elementMoved.connect(self._on_element_changed)
         self.model_manager.elementRemoved.connect(self._on_element_changed)
         self.model_manager.modelCleared.connect(self.refresh_table)
 
@@ -423,7 +421,7 @@ class RTCToolsDockWidget(QDockWidget):
             self._on_type_changed(self.get_selected_element_type())
 
     def _on_node_moved(self, elem_data):
-        self.refresh_table()
+        pass
 
     def _move_selected_element(self):
         elem_name = self._get_selected_element_name()
@@ -457,18 +455,22 @@ class RTCToolsDockWidget(QDockWidget):
         self.move_tool.start_moving_element(elem_data)
 
     def _on_element_placed(self, elem_data):
+        if not elem_data:
+            return
+
         elem_type = elem_data.get("type")
         if elem_type == "Branch":
             msg = f"Added Branch '{elem_data.get('name')}' ({elem_data.get('from_element')} → {elem_data.get('to_element')})"
         else:
             msg = f"Added {elem_type} '{elem_data.get('name')}'"
 
-        self.iface.messageBar().pushMessage(
-            "RTC-Tools",
-            msg,
-            level=Qgis.MessageLevel.Success,
-            duration=3
-        )
+        if self.iface and self.iface.messageBar():
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                msg,
+                level=Qgis.MessageLevel.Success,
+                duration=3
+            )
 
     def _on_element_changed(self, *args):
         self.refresh_table()

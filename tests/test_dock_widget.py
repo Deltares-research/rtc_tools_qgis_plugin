@@ -120,6 +120,39 @@ class TestDockWidget(unittest.TestCase):
         dlg.accept()
         self.assertEqual(dlg.result(), ElementDialog.Accepted)
 
+    def test_dock_constructor_positional_parent_compatibility(self):
+        from qgis.PyQt.QtWidgets import QWidget
+        parent_widget = QWidget()
+        dock = RTCToolsDockWidget(None, self.mm, self.add_tool, parent_widget)
+        self.assertEqual(dock.parentWidget(), parent_widget)
+
+    def test_element_dialog_branch_type_locked(self):
+        branch_data = {
+            "name": "Branch 1",
+            "type": "Branch",
+            "from_element": "Node 1",
+            "to_element": "Node 2",
+            "properties": {}
+        }
+        dlg = ElementDialog(branch_data)
+        self.assertFalse(dlg.combo_type.isEnabled())
+        self.assertEqual(dlg.combo_type.currentText(), "Branch")
+
+        node_data = {
+            "name": "Node 1",
+            "type": "Node",
+            "location": {"x": 10.0, "y": 20.0},
+            "properties": {}
+        }
+        dlg_node = ElementDialog(node_data)
+        self.assertTrue(dlg_node.combo_type.isEnabled())
+        self.assertEqual(dlg_node.combo_type.findText("Branch"), -1)
+
+    def test_on_element_placed_handles_none_safely(self):
+        # Should not raise AttributeError when None or when iface is None
+        self.dock._on_element_placed(None)
+        self.dock._on_element_placed({"name": "Node 1", "type": "Node"})
+
 if __name__ == "__main__":
     unittest.main()
 

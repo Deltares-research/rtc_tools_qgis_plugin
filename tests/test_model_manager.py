@@ -183,6 +183,19 @@ class TestModelManager(unittest.TestCase):
         self.assertIsNone(self.mm.add_element(QgsPointXY(float("nan"), 20.0), name="Bad1"))
         self.assertIsNone(self.mm.add_element(QgsPointXY(10.0, float("inf")), name="Bad2"))
 
+    def test_update_element_prevents_branch_point_type_conversion(self):
+        self.mm.add_element(QgsPointXY(10.0, 20.0), element_type="Node", name="Node 1")
+        self.mm.add_element(QgsPointXY(30.0, 40.0), element_type="Node", name="Node 2")
+        self.mm.add_branch("Node 1", "Node 2", name="Branch 1")
+
+        # Point to Branch should be rejected
+        self.assertFalse(self.mm.update_element("Node 1", new_type="Branch"))
+        self.assertEqual(self.mm.get_element("Node 1")["type"], "Node")
+
+        # Branch to Point should be rejected
+        self.assertFalse(self.mm.update_element("Branch 1", new_type="Node"))
+        self.assertEqual(self.mm.get_element("Branch 1")["type"], "Branch")
+
 if __name__ == "__main__":
     unittest.main()
 
