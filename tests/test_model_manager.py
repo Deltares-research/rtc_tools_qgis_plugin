@@ -157,14 +157,31 @@ class TestModelManager(unittest.TestCase):
     def test_update_element_invalid_location_fails(self):
         self.mm.add_element(QgsPointXY(10.0, 20.0), element_type="Node", name="Node 1")
 
-        # Pass invalid location
-        success = self.mm.update_element("Node 1", new_location="invalid_coords")
-        self.assertFalse(success)
+        # Pass invalid location strings and non-finite numbers
+        for bad_loc in ["invalid_coords", {"x": float("nan"), "y": 20.0}, {"x": 10.0, "y": float("inf")}, (float("-inf"), 0.0)]:
+            success = self.mm.update_element("Node 1", new_location=bad_loc)
+            self.assertFalse(success)
 
         # Position should remain unchanged
         elem = self.mm.get_element("Node 1")
         self.assertEqual(elem["location"]["x"], 10.0)
         self.assertEqual(elem["location"]["y"], 20.0)
+
+    def test_move_element_non_finite_coordinates_fails(self):
+        self.mm.add_element(QgsPointXY(10.0, 20.0), element_type="Node", name="Node 1")
+
+        self.assertIsNone(self.mm.move_element("Node 1", {"x": float("nan"), "y": 20.0}))
+        self.assertIsNone(self.mm.move_element("Node 1", {"x": 10.0, "y": float("inf")}))
+        self.assertIsNone(self.mm.move_element("Node 1", [float("-inf"), float("nan")]))
+        self.assertIsNone(self.mm.move_element("Node 1", QgsPointXY(float("nan"), 20.0)))
+
+        elem = self.mm.get_element("Node 1")
+        self.assertEqual(elem["location"]["x"], 10.0)
+        self.assertEqual(elem["location"]["y"], 20.0)
+
+    def test_add_element_non_finite_coordinates_fails(self):
+        self.assertIsNone(self.mm.add_element(QgsPointXY(float("nan"), 20.0), name="Bad1"))
+        self.assertIsNone(self.mm.add_element(QgsPointXY(10.0, float("inf")), name="Bad2"))
 
 if __name__ == "__main__":
     unittest.main()

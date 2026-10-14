@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from qgis.core import (
     QgsVectorLayer,
@@ -244,6 +245,14 @@ class ModelManager(QObject):
 
     def add_element(self, point, element_type="Node", name=None, properties=None):
         """Adds a point element feature to the memory layer."""
+        if point is None:
+            return None
+        try:
+            if not (math.isfinite(point.x()) and math.isfinite(point.y())):
+                return None
+        except (TypeError, AttributeError):
+            return None
+
         nodes_layer = self.get_or_create_nodes_layer()
 
         if not name:
@@ -280,8 +289,19 @@ class ModelManager(QObject):
         if not from_elem or not to_elem:
             return None
 
-        pt_from = QgsPointXY(from_elem["location"]["x"], from_elem["location"]["y"])
-        pt_to = QgsPointXY(to_elem["location"]["x"], to_elem["location"]["y"])
+        loc_from = from_elem.get("location", {})
+        loc_to = to_elem.get("location", {})
+        try:
+            fx, fy = float(loc_from.get("x")), float(loc_from.get("y"))
+            tx, ty = float(loc_to.get("x")), float(loc_to.get("y"))
+        except (TypeError, ValueError):
+            return None
+
+        if not (math.isfinite(fx) and math.isfinite(fy) and math.isfinite(tx) and math.isfinite(ty)):
+            return None
+
+        pt_from = QgsPointXY(fx, fy)
+        pt_to = QgsPointXY(tx, ty)
 
         branches_layer = self.get_or_create_branches_layer()
         if not name:
@@ -489,21 +509,29 @@ class ModelManager(QObject):
         if not self.nodes_layer or new_point is None:
             return None
 
-        # Standardize new_point to QgsPointXY
+        # Standardize new_point to QgsPointXY with finite coordinates check
         if isinstance(new_point, QgsPointXY):
-            new_pt = new_point
+            x_val = new_point.x()
+            y_val = new_point.y()
         elif isinstance(new_point, dict):
             try:
-                new_pt = QgsPointXY(float(new_point["x"]), float(new_point["y"]))
+                x_val = float(new_point["x"])
+                y_val = float(new_point["y"])
             except (KeyError, ValueError, TypeError):
                 return None
         elif isinstance(new_point, (list, tuple)) and len(new_point) >= 2:
             try:
-                new_pt = QgsPointXY(float(new_point[0]), float(new_point[1]))
+                x_val = float(new_point[0])
+                y_val = float(new_point[1])
             except (ValueError, TypeError):
                 return None
         else:
             return None
+
+        if not (math.isfinite(x_val) and math.isfinite(y_val)):
+            return None
+
+        new_pt = QgsPointXY(x_val, y_val)
 
         target_feat = None
         for feat in self.nodes_layer.getFeatures():
@@ -534,13 +562,29 @@ class ModelManager(QObject):
                         pt_from = new_pt
                     else:
                         from_elem = self.get_element(from_id)
-                        pt_from = QgsPointXY(from_elem["location"]["x"], from_elem["location"]["y"]) if from_elem else None
+                        if from_elem and "location" in from_elem:
+                            try:
+                                fx = float(from_elem["location"]["x"])
+                                fy = float(from_elem["location"]["y"])
+                                pt_from = QgsPointXY(fx, fy) if (math.isfinite(fx) and math.isfinite(fy)) else None
+                            except (TypeError, ValueError, KeyError):
+                                pt_from = None
+                        else:
+                            pt_from = None
 
                     if to_id == actual_name:
                         pt_to = new_pt
                     else:
                         to_elem = self.get_element(to_id)
-                        pt_to = QgsPointXY(to_elem["location"]["x"], to_elem["location"]["y"]) if to_elem else None
+                        if to_elem and "location" in to_elem:
+                            try:
+                                tx = float(to_elem["location"]["x"])
+                                ty = float(to_elem["location"]["y"])
+                                pt_to = QgsPointXY(tx, ty) if (math.isfinite(tx) and math.isfinite(ty)) else None
+                            except (TypeError, ValueError, KeyError):
+                                pt_to = None
+                        else:
+                            pt_to = None
 
                     if pt_from and pt_to:
                         branch_geom_updates[b_feat.id()] = QgsGeometry.fromPolylineXY([pt_from, pt_to])

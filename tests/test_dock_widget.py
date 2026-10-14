@@ -71,9 +71,15 @@ class TestDockWidget(unittest.TestCase):
             "properties": {}
         }
         dlg = ElementDialog(elem_data)
-        dlg.txt_x.setText("not_a_number")
-        with self.assertRaises(ValueError):
-            dlg.get_updated_data()
+        for bad_val in ["not_a_number", "nan", "inf", "-inf"]:
+            dlg.txt_x.setText(bad_val)
+            with self.assertRaises(ValueError):
+                dlg.get_updated_data()
+        dlg.txt_x.setText("10.0")
+        for bad_val in ["not_a_number", "nan", "inf", "-inf"]:
+            dlg.txt_y.setText(bad_val)
+            with self.assertRaises(ValueError):
+                dlg.get_updated_data()
 
     @patch("rtc_tools_qgis_plugin.element_dialog.QMessageBox.warning")
     def test_element_dialog_accept_validation(self, mock_warning):
@@ -91,21 +97,23 @@ class TestDockWidget(unittest.TestCase):
         self.assertTrue(mock_warning.called)
         self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
 
-        # Invalid X should be rejected
-        mock_warning.reset_mock()
-        dlg.txt_name.setText("Node 1")
-        dlg.txt_x.setText("abc")
-        dlg.accept()
-        self.assertTrue(mock_warning.called)
-        self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
+        # Non-numeric or non-finite X should be rejected
+        for bad_x in ["abc", "nan", "inf", "-inf"]:
+            mock_warning.reset_mock()
+            dlg.txt_name.setText("Node 1")
+            dlg.txt_x.setText(bad_x)
+            dlg.accept()
+            self.assertTrue(mock_warning.called)
+            self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
 
-        # Invalid Y should be rejected
-        mock_warning.reset_mock()
-        dlg.txt_x.setText("10.0")
-        dlg.txt_y.setText("xyz")
-        dlg.accept()
-        self.assertTrue(mock_warning.called)
-        self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
+        # Non-numeric or non-finite Y should be rejected
+        for bad_y in ["xyz", "nan", "inf", "-inf"]:
+            mock_warning.reset_mock()
+            dlg.txt_x.setText("10.0")
+            dlg.txt_y.setText(bad_y)
+            dlg.accept()
+            self.assertTrue(mock_warning.called)
+            self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
 
         # Valid input should be accepted
         dlg.txt_y.setText("25.0")

@@ -1,4 +1,5 @@
 import json
+import math
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -184,16 +185,20 @@ class ElementDialog(QDialog):
             x_text = self.txt_x.text().strip()
             y_text = self.txt_y.text().strip()
             try:
-                float(x_text)
+                x_val = float(x_text)
+                if not math.isfinite(x_val):
+                    raise ValueError("X coordinate must be a finite number.")
             except (ValueError, TypeError):
-                QMessageBox.warning(self, "Invalid Input", "X coordinate must be a valid number.")
+                QMessageBox.warning(self, "Invalid Input", "X coordinate must be a valid finite number.")
                 self.txt_x.setFocus()
                 return
 
             try:
-                float(y_text)
+                y_val = float(y_text)
+                if not math.isfinite(y_val):
+                    raise ValueError("Y coordinate must be a finite number.")
             except (ValueError, TypeError):
-                QMessageBox.warning(self, "Invalid Input", "Y coordinate must be a valid number.")
+                QMessageBox.warning(self, "Invalid Input", "Y coordinate must be a valid finite number.")
                 self.txt_y.setFocus()
                 return
 
@@ -378,6 +383,8 @@ class ElementDialog(QDialog):
             try:
                 x_val = float(x_text)
                 y_val = float(y_text)
+                if not (math.isfinite(x_val) and math.isfinite(y_val)):
+                    raise ValueError(f"Non-finite coordinate values: X='{x_text}', Y='{y_text}'")
                 res["location"] = {"x": x_val, "y": y_val}
             except (ValueError, TypeError):
                 raise ValueError(f"Invalid coordinate values: X='{x_text}', Y='{y_text}'")
