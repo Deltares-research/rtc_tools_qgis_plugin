@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from qgis.core import (
     QgsVectorLayer,
@@ -25,6 +26,7 @@ class ModelManager(QObject):
     # Signals
     elementAdded = pyqtSignal(dict)
     elementUpdated = pyqtSignal(dict)
+    elementMoved = pyqtSignal(dict)
     elementRemoved = pyqtSignal(str)
     modelCleared = pyqtSignal()
     layerCreated = pyqtSignal(object)
@@ -243,6 +245,14 @@ class ModelManager(QObject):
 
     def add_element(self, point, element_type="Node", name=None, properties=None):
         """Adds a point element feature to the memory layer."""
+        if point is None:
+            return None
+        try:
+            if not (math.isfinite(point.x()) and math.isfinite(point.y())):
+                return None
+        except (TypeError, AttributeError):
+            return None
+
         nodes_layer = self.get_or_create_nodes_layer()
 
         if not name:
@@ -279,8 +289,19 @@ class ModelManager(QObject):
         if not from_elem or not to_elem:
             return None
 
-        pt_from = QgsPointXY(from_elem["location"]["x"], from_elem["location"]["y"])
-        pt_to = QgsPointXY(to_elem["location"]["x"], to_elem["location"]["y"])
+        loc_from = from_elem.get("location", {})
+        loc_to = to_elem.get("location", {})
+        try:
+            fx, fy = float(loc_from.get("x")), float(loc_from.get("y"))
+            tx, ty = float(loc_to.get("x")), float(loc_to.get("y"))
+        except (TypeError, ValueError):
+            return None
+
+        if not (math.isfinite(fx) and math.isfinite(fy) and math.isfinite(tx) and math.isfinite(ty)):
+            return None
+
+        pt_from = QgsPointXY(fx, fy)
+        pt_to = QgsPointXY(tx, ty)
 
         branches_layer = self.get_or_create_branches_layer()
         if not name:
@@ -475,11 +496,139 @@ class ModelManager(QObject):
 
         return nearest_elem
 
-    def update_element(self, element_id, new_name=None, new_type=None, new_properties=None):
-        """Updates attributes of an existing point or branch element by name/ID."""
+    def move_element(self, element_id, new_point, _emit_updated=True):
+        """Moves an existing point element to a new location and updates connected branches.
+
+        Args:
+            element_id (str): Name or ID of the point element to move.
+            new_point (QgsPointXY or dict or tuple or list): The new coordinates.
+
+        Returns:
+            dict or None: Updated element data dictionary, or None if element not found.
+        """
+        if not self.nodes_layer or new_point is None:
+            return None
+
+        # Standardize new_point to QgsPointXY with finite coordinates check
+        if isinstance(new_point, QgsPointXY):
+            x_val = new_point.x()
+            y_val = new_point.y()
+        elif isinstance(new_point, dict):
+            try:
+                x_val = float(new_point["x"])
+                y_val = float(new_point["y"])
+            except (KeyError, ValueError, TypeError):
+                return None
+        elif isinstance(new_point, (list, tuple)) and len(new_point) >= 2:
+            try:
+                x_val = float(new_point[0])
+                y_val = float(new_point[1])
+            except (ValueError, TypeError):
+                return None
+        else:
+            return None
+
+        if not (math.isfinite(x_val) and math.isfinite(y_val)):
+            return None
+
+        new_pt = QgsPointXY(x_val, y_val)
+
+        target_feat = None
+        for feat in self.nodes_layer.getFeatures():
+            if feat.attribute("name") == element_id or feat.attribute("id") == element_id:
+                target_feat = feat
+                break
+
+        if target_feat is None:
+            return None
+
+        actual_name = target_feat.attribute("name") or target_feat.attribute("id")
+
+        # 1. Update point geometry in nodes layer
+        new_geom = QgsGeometry.fromPointXY(new_pt)
+        self.nodes_layer.dataProvider().changeGeometryValues({target_feat.id(): new_geom})
+        self.nodes_layer.updateExtents()
+        self.nodes_layer.triggerRepaint()
+
+        # 2. Update connected branches in branches layer
+        if self.branches_layer:
+            branch_geom_updates = {}
+            for b_feat in self.branches_layer.getFeatures():
+                from_id = b_feat.attribute("from_element")
+                to_id = b_feat.attribute("to_element")
+
+                if from_id == actual_name or to_id == actual_name:
+                    if from_id == actual_name:
+                        pt_from = new_pt
+                    else:
+                        from_elem = self.get_element(from_id)
+                        if from_elem and "location" in from_elem:
+                            try:
+                                fx = float(from_elem["location"]["x"])
+                                fy = float(from_elem["location"]["y"])
+                                pt_from = QgsPointXY(fx, fy) if (math.isfinite(fx) and math.isfinite(fy)) else None
+                            except (TypeError, ValueError, KeyError):
+                                pt_from = None
+                        else:
+                            pt_from = None
+
+                    if to_id == actual_name:
+                        pt_to = new_pt
+                    else:
+                        to_elem = self.get_element(to_id)
+                        if to_elem and "location" in to_elem:
+                            try:
+                                tx = float(to_elem["location"]["x"])
+                                ty = float(to_elem["location"]["y"])
+                                pt_to = QgsPointXY(tx, ty) if (math.isfinite(tx) and math.isfinite(ty)) else None
+                            except (TypeError, ValueError, KeyError):
+                                pt_to = None
+                        else:
+                            pt_to = None
+
+                    if pt_from and pt_to:
+                        branch_geom_updates[b_feat.id()] = QgsGeometry.fromPolylineXY([pt_from, pt_to])
+
+            if branch_geom_updates:
+                self.branches_layer.dataProvider().changeGeometryValues(branch_geom_updates)
+                self.branches_layer.updateExtents()
+                self.branches_layer.triggerRepaint()
+
+        if self.iface and self.iface.mapCanvas():
+            self.iface.mapCanvas().refresh()
+
+        updated_data = self.get_element(actual_name)
+        if updated_data:
+            self.elementMoved.emit(updated_data)
+            if _emit_updated:
+                self.elementUpdated.emit(updated_data)
+
+        return updated_data
+
+    def update_element(self, element_id, new_name=None, new_type=None, new_properties=None, new_location=None):
+        """Updates attributes and optionally location of an existing point or branch element by name/ID."""
+        # 1. Validate that the element exists
+        current_elem = self.get_element(element_id)
+        if not current_elem:
+            return False
+
+        # Prevent converting a Branch into a point element or vice versa across geometry layers
+        current_is_branch = current_elem.get("type") == "Branch"
+        if new_type is not None:
+            new_is_branch = new_type == "Branch"
+            if current_is_branch != new_is_branch:
+                return False
+
+        # 2. Validate name collisions before performing any modifications
         if new_name and new_name != element_id:
             if self.get_element(new_name):
                 return False  # Name collision
+
+        # 3. Apply location update if requested, propagating move failure
+        if new_location is not None:
+            moved = self.move_element(element_id, new_location, _emit_updated=False)
+            if moved is None:
+                return False
 
         target_name = new_name if new_name else element_id
 

@@ -87,11 +87,15 @@ class ModelRunnerThread(QThread):
 class RTCToolsDockWidget(QDockWidget):
     """Dockable panel for RTC-Tools model building and JSON export."""
 
-    def __init__(self, iface, model_manager, map_tool, parent=None):
+    def __init__(self, iface, model_manager, map_tool, parent=None, move_tool=None):
         super().__init__("RTC-Tools Model Builder", parent)
         self.iface = iface
         self.model_manager = model_manager
         self.map_tool = map_tool
+        if move_tool is None and iface and iface.mapCanvas():
+            from .map_tool import MoveNodeMapTool
+            move_tool = MoveNodeMapTool(self.iface.mapCanvas(), self.model_manager, iface=self.iface)
+        self.move_tool = move_tool
         self.setObjectName("RTCToolsDockWidget")
 
         # Element types supported
@@ -115,7 +119,7 @@ class RTCToolsDockWidget(QDockWidget):
         layout.addWidget(title_label)
 
         # --- 1. Element Placement Group ---
-        grp_placement = CollapsibleGroupBox("Add Elements", expanded=False)
+        grp_placement = CollapsibleGroupBox("Elements", expanded=False)
         layout_placement = grp_placement.content_layout
 
         h_layout_type = QHBoxLayout()
@@ -131,6 +135,11 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_add_element.setCheckable(True)
         self.btn_add_element.clicked.connect(self._toggle_map_tool)
         layout_placement.addWidget(self.btn_add_element)
+
+        self.btn_move_element = QPushButton("✋ Move Element on Map")
+        self.btn_move_element.setCheckable(True)
+        self.btn_move_element.clicked.connect(self._toggle_move_tool)
+        layout_placement.addWidget(self.btn_move_element)
 
         layout.addWidget(grp_placement)
 
@@ -152,6 +161,9 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_edit = QPushButton("Edit")
         self.btn_edit.clicked.connect(self._edit_selected_element)
 
+        self.btn_move = QPushButton("Move")
+        self.btn_move.clicked.connect(self._move_selected_element)
+
         self.btn_delete = QPushButton("Delete")
         self.btn_delete.clicked.connect(self._delete_selected_element)
 
@@ -159,6 +171,7 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_clear.clicked.connect(self._clear_all_elements)
 
         h_layout_btns.addWidget(self.btn_edit)
+        h_layout_btns.addWidget(self.btn_move)
         h_layout_btns.addWidget(self.btn_delete)
         h_layout_btns.addWidget(self.btn_clear)
         layout_table.addLayout(h_layout_btns)
@@ -348,6 +361,14 @@ class RTCToolsDockWidget(QDockWidget):
 
         # Map tool placement signal
         self.map_tool.elementPlaced.connect(self._on_element_placed)
+        if hasattr(self.map_tool, "deactivated"):
+            self.map_tool.deactivated.connect(self._on_map_tool_deactivated)
+
+        # Move tool signals
+        if self.move_tool:
+            self.move_tool.nodeMoved.connect(self._on_node_moved)
+            if hasattr(self.move_tool, "deactivated"):
+                self.move_tool.deactivated.connect(self._on_move_tool_deactivated)
 
         # Refresh Model Run buttons initial state
         self._update_run_buttons_state()
@@ -364,25 +385,92 @@ class RTCToolsDockWidget(QDockWidget):
 
     def _toggle_map_tool(self, checked):
         if checked:
+            if hasattr(self, "btn_move_element") and self.btn_move_element.isChecked():
+                self.btn_move_element.setChecked(False)
+                if self.move_tool:
+                    self.iface.mapCanvas().unsetMapTool(self.move_tool)
+                self.btn_move_element.setText("✋ Move Element on Map")
             self.iface.mapCanvas().setMapTool(self.map_tool)
             self.btn_add_element.setText("❌ Cancel Map Tool")
         else:
             self.iface.mapCanvas().unsetMapTool(self.map_tool)
             self._on_type_changed(self.get_selected_element_type())
 
+    def _toggle_move_tool(self, checked):
+        if not self.move_tool:
+            return
+        if checked:
+            if self.btn_add_element.isChecked():
+                self.btn_add_element.setChecked(False)
+                self.iface.mapCanvas().unsetMapTool(self.map_tool)
+                self._on_type_changed(self.get_selected_element_type())
+            self.iface.mapCanvas().setMapTool(self.move_tool)
+            self.btn_move_element.setText("❌ Cancel Move Tool")
+        else:
+            self.iface.mapCanvas().unsetMapTool(self.move_tool)
+            self.btn_move_element.setText("✋ Move Element on Map")
+
+    def _on_move_tool_deactivated(self):
+        if hasattr(self, "btn_move_element"):
+            self.btn_move_element.setChecked(False)
+            self.btn_move_element.setText("✋ Move Element on Map")
+
+    def _on_map_tool_deactivated(self):
+        if hasattr(self, "btn_add_element"):
+            self.btn_add_element.setChecked(False)
+            self._on_type_changed(self.get_selected_element_type())
+
+    def _on_node_moved(self, elem_data):
+        pass
+
+    def _move_selected_element(self):
+        elem_name = self._get_selected_element_name()
+        if not elem_name:
+            QMessageBox.information(self, "RTC-Tools", "Please select a node/element from the table to move.")
+            return
+
+        elem_data = self.model_manager.get_element(elem_name)
+        if not elem_data:
+            return
+
+        if elem_data.get("type") == "Branch":
+            QMessageBox.information(
+                self,
+                "RTC-Tools",
+                f"'{elem_name}' is a Branch connection. Only point elements (nodes) can be moved directly; connected branches adjust automatically."
+            )
+            return
+
+        if not self.move_tool:
+            return
+
+        if self.btn_add_element.isChecked():
+            self.btn_add_element.setChecked(False)
+            self.iface.mapCanvas().unsetMapTool(self.map_tool)
+            self._on_type_changed(self.get_selected_element_type())
+
+        self.btn_move_element.setChecked(True)
+        self.btn_move_element.setText("❌ Cancel Move Tool")
+        self.iface.mapCanvas().setMapTool(self.move_tool)
+        self.move_tool.start_moving_element(elem_data)
+
     def _on_element_placed(self, elem_data):
+        if not elem_data:
+            return
+
         elem_type = elem_data.get("type")
         if elem_type == "Branch":
             msg = f"Added Branch '{elem_data.get('name')}' ({elem_data.get('from_element')} → {elem_data.get('to_element')})"
         else:
             msg = f"Added {elem_type} '{elem_data.get('name')}'"
 
-        self.iface.messageBar().pushMessage(
-            "RTC-Tools",
-            msg,
-            level=Qgis.MessageLevel.Success,
-            duration=3
-        )
+        if self.iface and self.iface.messageBar():
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                msg,
+                level=Qgis.MessageLevel.Success,
+                duration=3
+            )
 
     def _on_element_changed(self, *args):
         self.refresh_table()
@@ -436,7 +524,8 @@ class RTCToolsDockWidget(QDockWidget):
                 elem_name,
                 new_name=updated["name"],
                 new_type=updated["type"],
-                new_properties=updated["properties"]
+                new_properties=updated["properties"],
+                new_location=updated.get("location")
             )
             if not success:
                 QMessageBox.warning(self, "RTC-Tools", f"Could not update element. An element named '{updated['name']}' may already exist.")

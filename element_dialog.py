@@ -1,4 +1,5 @@
 import json
+import math
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -13,6 +14,7 @@ from qgis.PyQt.QtWidgets import (
     QLabel,
     QHeaderView,
     QGroupBox,
+    QMessageBox,
 )
 from qgis.PyQt.QtCore import Qt
 
@@ -37,15 +39,21 @@ class ElementDialog(QDialog):
 
         self.txt_name = QLineEdit()
 
+        is_branch = self.element_data.get("type") == "Branch"
         self.combo_type = QComboBox()
-        for et in self.element_types:
-            self.combo_type.addItem(et)
+        if is_branch:
+            self.combo_type.addItem("Branch")
+            self.combo_type.setEnabled(False)
+        else:
+            for et in self.element_types:
+                if et != "Branch":
+                    self.combo_type.addItem(et)
         self.combo_type.currentTextChanged.connect(self._on_type_changed)
 
         self.txt_x = QLineEdit()
-        self.txt_x.setReadOnly(True)
+        self.txt_x.setPlaceholderText("X coordinate")
         self.txt_y = QLineEdit()
-        self.txt_y.setReadOnly(True)
+        self.txt_y.setPlaceholderText("Y coordinate")
 
         self.txt_from = QLineEdit()
         self.txt_from.setReadOnly(True)
@@ -55,7 +63,6 @@ class ElementDialog(QDialog):
         form.addRow("Name:", self.txt_name)
         form.addRow("Type:", self.combo_type)
 
-        is_branch = self.element_data.get("type") == "Branch"
         if is_branch:
             form.addRow("Upstream (From):", self.txt_from)
             form.addRow("Downstream (To):", self.txt_to)
@@ -171,6 +178,37 @@ class ElementDialog(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
+    def accept(self):
+        name = self.txt_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Invalid Input", "Element name cannot be empty.")
+            self.txt_name.setFocus()
+            return
+
+        elem_type = self.combo_type.currentText()
+        if elem_type != "Branch":
+            x_text = self.txt_x.text().strip()
+            y_text = self.txt_y.text().strip()
+            try:
+                x_val = float(x_text)
+                if not math.isfinite(x_val):
+                    raise ValueError("X coordinate must be a finite number.")
+            except (ValueError, TypeError):
+                QMessageBox.warning(self, "Invalid Input", "X coordinate must be a valid finite number.")
+                self.txt_x.setFocus()
+                return
+
+            try:
+                y_val = float(y_text)
+                if not math.isfinite(y_val):
+                    raise ValueError("Y coordinate must be a finite number.")
+            except (ValueError, TypeError):
+                QMessageBox.warning(self, "Invalid Input", "Y coordinate must be a valid finite number.")
+                self.txt_y.setFocus()
+                return
+
+        super().accept()
+
     def _on_type_changed(self, text):
         if text == "Reservoir":
             self.grp_reservoir.show()
@@ -258,12 +296,6 @@ class ElementDialog(QDialog):
             self.prop_table.setItem(row, 1, QTableWidgetItem(str(v)))
 
     def _add_prop_row(self):
-            row = self.prop_table.rowCount()
-            self.prop_table.insertRow(row)
-            self.prop_table.setItem(row, 0, QTableWidgetItem(str(k)))
-            self.prop_table.setItem(row, 1, QTableWidgetItem(str(v)))
-
-    def _add_prop_row(self):
         row = self.prop_table.rowCount()
         self.prop_table.insertRow(row)
         self.prop_table.setItem(row, 0, QTableWidgetItem("new_param"))
@@ -275,7 +307,7 @@ class ElementDialog(QDialog):
             self.prop_table.removeRow(current_row)
 
     def get_updated_data(self):
-        """Returns updated name, type, and properties dictionary."""
+        """Returns updated name, type, properties dictionary, and location."""
         name = self.txt_name.text().strip()
         elem_type = self.combo_type.currentText().strip()
 
@@ -344,8 +376,23 @@ class ElementDialog(QDialog):
                 if k and k not in managed_keys:
                     props[k] = v
 
-        return {
+        res = {
             "name": name or self.element_data.get("name"),
             "type": elem_type,
             "properties": props
         }
+
+        if elem_type != "Branch":
+            x_text = self.txt_x.text().strip()
+            y_text = self.txt_y.text().strip()
+            try:
+                x_val = float(x_text)
+                y_val = float(y_text)
+                if not (math.isfinite(x_val) and math.isfinite(y_val)):
+                    raise ValueError(f"Non-finite coordinate values: X='{x_text}', Y='{y_text}'")
+                res["location"] = {"x": x_val, "y": y_val}
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid coordinate values: X='{x_text}', Y='{y_text}'")
+
+        return res
+

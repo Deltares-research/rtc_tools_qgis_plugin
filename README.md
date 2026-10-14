@@ -36,7 +36,11 @@ This QGIS plugin provides a spatial and visual interface (GUI) to:
   - Inflow boundary inputs (`<Inflow>_Inflow`)
   - Terminal/Level flow outputs (`<Terminal>_Q`)
   - Topological `connect()` equations and variable assignment statements
-- **Map Interaction**: Place elements on canvas and connect them with `Branch` lines (including topological validation).
+- **Map Interaction & Node Relocation**:
+  - Place elements on canvas and connect them with `Branch` lines (including topological validation).
+  - Interactively move any node/element on the canvas using the **✋ Move Element on Map** tool (supports click-and-drag as well as two-click pick-and-place with live rubber band previews).
+  - Relocating a node automatically stretches and updates all connected incoming and outgoing branch lines in real time.
+  - Nodes can also be moved from the table using the **Move** button or by directly editing their X and Y coordinates in the element properties dialog.
 - **QGIS Memory Layers**: Vector layers (`RTC-Tools Elements` and `RTC-Tools Branches`) with custom symbology and labels.
 - **Model Validation**: Check model topology against RTC-Tools connectivity rules:
   - `Inflow`: Exactly 1 output (0 inputs)
@@ -44,7 +48,7 @@ This QGIS plugin provides a spatial and visual interface (GUI) to:
   - `Reservoir`: Exactly 1 input and 1 output
   - `Node`: At least 1 input and exactly 1 output
   - `Branch`: Valid upstream and downstream connections
-- **Collapsible Panel Sections**: Toggle between expand/collapse states for all dock panel sections ("Add Elements", "Model Elements", "Optimization Goals", "Model File") to optimize screen space.
+- **Collapsible Panel Sections**: Toggle between expand/collapse states for all dock panel sections ("Elements", "Model Elements", "Optimization Goals", "Model File") to optimize screen space.
 - **Optimization Goal Table**:
   - Interactive Goal Table editor supporting all RTC-Tools goal parameters (`id`, `state`, `active`, `goal_type`, `function_min`, `function_max`, `function_nominal`, `target_data_type`, `target_min`, `target_max`, `priority`, `weight`, `order`, `Description`)
   - Auto-suggests state variable names from current model elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
@@ -158,17 +162,33 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
 ## Usage
 
 1. Open the **RTC-Tools Model Builder** dock panel.
-2. Under"**Add Elements**, choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
+2. Under **Elements**, choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
 3. Click **📍 Add Element on Map** and click canvas to place elements.
 4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
-5. Under **Model File**, click **🔍 Validate Model** to verify all input/output constraints.
-6. Under **Model Elements**, edit or delete the model elements in the table and specify bounds.
-7. Specify Goals and the corresponding plot configuration in the corresponding sub menu. 
-8. Fill in time series values under **TimeSeries Import Data** and export the time series data. 
-9. Save your model to JSON via **💾 Save Model to JSON...**.
-10. **Construct RTC-Tools Model** creates a complete RTC-Tools folder structure. 
-11. Export the time series import data into this folder structure with **Export XML...** under **TimeSeries Import Data** into this structure.
-12. Select a Python Environment under **Model Run** and run the RTC-Tools model with **Run RTC-Tools Model**
+5. To reposition an element, click **✋ Move Element on Map** and drag the node (or click to pick and click to place). Connected branches automatically update. You can also select a node in the table and click **Move**, or edit coordinates directly in the **Edit** dialog.
+6. Under **Model File**, click **🔍 Validate Model** to verify all input/output constraints.
+7. Under **Model Elements**, edit or delete the model elements in the table and specify bounds.
+8. Specify Goals and the corresponding plot configuration in the corresponding sub menu. 
+9. Fill in time series values under **TimeSeries Import Data** and export the time series data. 
+10. Save your model to JSON via **💾 Save Model to JSON...**.
+11. **Construct RTC-Tools Model** creates a complete RTC-Tools folder structure. 
+12. Export the time series import data into this folder structure with **Export XML...** under **TimeSeries Import Data** into this structure.
+13. Select a Python Environment under **Model Run** and run the RTC-Tools model with **Run RTC-Tools Model**
+
+## Running Tests
+
+Automated headless tests are provided in the `tests/` directory and can be run using QGIS's Python environment:
+
+- **Windows**:
+  ```powershell
+  & "C:\Program Files\QGIS 3.34.12\bin\python-qgis-ltr.bat" run_tests.py
+  ```
+- **Linux / macOS (or CI/CD)**:
+  ```bash
+  python3 run_tests.py
+  ```
+
+The test runner configures `QT_QPA_PLATFORM=offscreen` and starts a GUI-enabled `QgsApplication([], True)` in headless mode, exercising the model manager, map tools, canvas operations, dock widget, and dialogs without requiring a graphical window or display.
 
 ## License
 
