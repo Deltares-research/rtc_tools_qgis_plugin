@@ -562,12 +562,21 @@ class ModelManager(QObject):
 
     def update_element(self, element_id, new_name=None, new_type=None, new_properties=None, new_location=None):
         """Updates attributes and optionally location of an existing point or branch element by name/ID."""
-        if new_location is not None:
-            self.move_element(element_id, new_location)
+        # 1. Validate that the element exists
+        current_elem = self.get_element(element_id)
+        if not current_elem:
+            return False
 
+        # 2. Validate name collisions before performing any modifications
         if new_name and new_name != element_id:
             if self.get_element(new_name):
                 return False  # Name collision
+
+        # 3. Apply location update if requested, propagating move failure
+        if new_location is not None:
+            moved = self.move_element(element_id, new_location)
+            if moved is None:
+                return False
 
         target_name = new_name if new_name else element_id
 

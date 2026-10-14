@@ -13,6 +13,7 @@ from qgis.PyQt.QtWidgets import (
     QLabel,
     QHeaderView,
     QGroupBox,
+    QMessageBox,
 )
 from qgis.PyQt.QtCore import Qt
 
@@ -170,6 +171,33 @@ class ElementDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+    def accept(self):
+        name = self.txt_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Invalid Input", "Element name cannot be empty.")
+            self.txt_name.setFocus()
+            return
+
+        elem_type = self.combo_type.currentText()
+        if elem_type != "Branch":
+            x_text = self.txt_x.text().strip()
+            y_text = self.txt_y.text().strip()
+            try:
+                float(x_text)
+            except (ValueError, TypeError):
+                QMessageBox.warning(self, "Invalid Input", "X coordinate must be a valid number.")
+                self.txt_x.setFocus()
+                return
+
+            try:
+                float(y_text)
+            except (ValueError, TypeError):
+                QMessageBox.warning(self, "Invalid Input", "Y coordinate must be a valid number.")
+                self.txt_y.setFocus()
+                return
+
+        super().accept()
 
     def _on_type_changed(self, text):
         if text == "Reservoir":
@@ -345,12 +373,14 @@ class ElementDialog(QDialog):
         }
 
         if elem_type != "Branch":
+            x_text = self.txt_x.text().strip()
+            y_text = self.txt_y.text().strip()
             try:
-                x_val = float(self.txt_x.text().strip())
-                y_val = float(self.txt_y.text().strip())
+                x_val = float(x_text)
+                y_val = float(y_text)
                 res["location"] = {"x": x_val, "y": y_val}
             except (ValueError, TypeError):
-                pass
+                raise ValueError(f"Invalid coordinate values: X='{x_text}', Y='{y_text}'")
 
         return res
 

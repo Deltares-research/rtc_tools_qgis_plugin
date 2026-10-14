@@ -1,8 +1,8 @@
 import unittest
 from qgis.core import QgsPointXY
 from qgis.gui import QgsMapCanvas
-from RTC_Tools_QGIS_Plugin.model_manager import ModelManager
-from RTC_Tools_QGIS_Plugin.map_tool import AddElementMapTool, MoveNodeMapTool
+from rtc_tools_qgis_plugin.model_manager import ModelManager
+from rtc_tools_qgis_plugin.map_tool import AddElementMapTool, MoveNodeMapTool
 
 class TestMapTools(unittest.TestCase):
     def setUp(self):

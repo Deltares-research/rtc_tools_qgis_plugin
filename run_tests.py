@@ -10,6 +10,9 @@ import os
 import unittest
 
 def main():
+    # Set Qt offscreen platform before importing QGIS / Qt
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
     # Ensure workspace root and parent directory are in sys.path
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(plugin_dir)

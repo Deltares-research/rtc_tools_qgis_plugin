@@ -1,10 +1,11 @@
 import unittest
+from unittest.mock import patch
 from qgis.core import QgsPointXY
 from qgis.gui import QgsMapCanvas
-from RTC_Tools_QGIS_Plugin.model_manager import ModelManager
-from RTC_Tools_QGIS_Plugin.map_tool import AddElementMapTool, MoveNodeMapTool
-from RTC_Tools_QGIS_Plugin.dock_widget import RTCToolsDockWidget
-from RTC_Tools_QGIS_Plugin.element_dialog import ElementDialog
+from rtc_tools_qgis_plugin.model_manager import ModelManager
+from rtc_tools_qgis_plugin.map_tool import AddElementMapTool, MoveNodeMapTool
+from rtc_tools_qgis_plugin.dock_widget import RTCToolsDockWidget
+from rtc_tools_qgis_plugin.element_dialog import ElementDialog
 
 class TestDockWidget(unittest.TestCase):
     def setUp(self):
@@ -61,6 +62,55 @@ class TestDockWidget(unittest.TestCase):
         self.assertIn("location", updated)
         self.assertEqual(updated["location"]["x"], 42.5)
         self.assertEqual(updated["location"]["y"], 99.1)
+
+    def test_element_dialog_invalid_coordinates_raise_value_error(self):
+        elem_data = {
+            "name": "Node 1",
+            "type": "Node",
+            "location": {"x": 10.0, "y": 20.0},
+            "properties": {}
+        }
+        dlg = ElementDialog(elem_data)
+        dlg.txt_x.setText("not_a_number")
+        with self.assertRaises(ValueError):
+            dlg.get_updated_data()
+
+    @patch("rtc_tools_qgis_plugin.element_dialog.QMessageBox.warning")
+    def test_element_dialog_accept_validation(self, mock_warning):
+        elem_data = {
+            "name": "Node 1",
+            "type": "Node",
+            "location": {"x": 10.0, "y": 20.0},
+            "properties": {}
+        }
+        dlg = ElementDialog(elem_data)
+
+        # Empty name should be rejected
+        dlg.txt_name.setText("")
+        dlg.accept()
+        self.assertTrue(mock_warning.called)
+        self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
+
+        # Invalid X should be rejected
+        mock_warning.reset_mock()
+        dlg.txt_name.setText("Node 1")
+        dlg.txt_x.setText("abc")
+        dlg.accept()
+        self.assertTrue(mock_warning.called)
+        self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
+
+        # Invalid Y should be rejected
+        mock_warning.reset_mock()
+        dlg.txt_x.setText("10.0")
+        dlg.txt_y.setText("xyz")
+        dlg.accept()
+        self.assertTrue(mock_warning.called)
+        self.assertNotEqual(dlg.result(), ElementDialog.Accepted)
+
+        # Valid input should be accepted
+        dlg.txt_y.setText("25.0")
+        dlg.accept()
+        self.assertEqual(dlg.result(), ElementDialog.Accepted)
 
 if __name__ == "__main__":
     unittest.main()

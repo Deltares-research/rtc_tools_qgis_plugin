@@ -3,7 +3,7 @@ import tempfile
 import json
 import os
 from qgis.core import QgsPointXY
-from RTC_Tools_QGIS_Plugin.model_manager import ModelManager
+from rtc_tools_qgis_plugin.model_manager import ModelManager
 
 class TestModelManager(unittest.TestCase):
     def setUp(self):
@@ -130,6 +130,8 @@ class TestModelManager(unittest.TestCase):
             self.assertEqual(n1["location"]["y"], 88.0)
 
             # Re-import to a fresh manager
+            from qgis.core import QgsProject
+            QgsProject.instance().removeAllMapLayers()
             mm2 = ModelManager(None)
             self.assertTrue(mm2.import_from_json(tmp.name))
             n1_imported = mm2.get_element("Node 1")
@@ -138,6 +140,31 @@ class TestModelManager(unittest.TestCase):
         finally:
             if os.path.exists(tmp.name):
                 os.remove(tmp.name)
+
+    def test_update_element_name_collision_does_not_move(self):
+        self.mm.add_element(QgsPointXY(10.0, 20.0), element_type="Node", name="Node 1")
+        self.mm.add_element(QgsPointXY(30.0, 40.0), element_type="Node", name="Node 2")
+
+        # Attempt to rename Node 1 to Node 2 (collision) while also passing a new location
+        success = self.mm.update_element("Node 1", new_name="Node 2", new_location={"x": 50.0, "y": 60.0})
+        self.assertFalse(success)
+
+        # Node 1 position must NOT have changed
+        elem1 = self.mm.get_element("Node 1")
+        self.assertEqual(elem1["location"]["x"], 10.0)
+        self.assertEqual(elem1["location"]["y"], 20.0)
+
+    def test_update_element_invalid_location_fails(self):
+        self.mm.add_element(QgsPointXY(10.0, 20.0), element_type="Node", name="Node 1")
+
+        # Pass invalid location
+        success = self.mm.update_element("Node 1", new_location="invalid_coords")
+        self.assertFalse(success)
+
+        # Position should remain unchanged
+        elem = self.mm.get_element("Node 1")
+        self.assertEqual(elem["location"]["x"], 10.0)
+        self.assertEqual(elem["location"]["y"], 20.0)
 
 if __name__ == "__main__":
     unittest.main()
