@@ -188,7 +188,7 @@ Automated headless tests are provided in the `tests/` directory and can be run u
   python3 run_tests.py
   ```
 
-The test runner starts a headless `QgsApplication([], False)`, exercises the model manager, map tools, canvas operations, dock widget, and dialogs without requiring a graphical window or display.
+The test runner configures `QT_QPA_PLATFORM=offscreen` and starts a GUI-enabled `QgsApplication([], True)` in headless mode, exercising the model manager, map tools, canvas operations, dock widget, and dialogs without requiring a graphical window or display.
 
 ## License
 
