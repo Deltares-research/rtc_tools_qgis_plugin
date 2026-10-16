@@ -218,6 +218,76 @@ class TestDockWidget(unittest.TestCase):
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
+    def test_csv_column_import_dialog_and_timeseries_import(self):
+        import os
+        import tempfile
+        from qgis.PyQt.QtWidgets import QDialog
+        from rtc_tools_qgis_plugin.timeseries_import_dialog import (
+            CsvColumnImportDialog,
+            TimeseriesImportDialog,
+            SeriesValuesDialog,
+            _read_csv_rows,
+        )
+
+        csv_content = (
+            "DateTime,Inflow_1,Inflow_2\n"
+            "2026-01-01 00:00:00,12.5,100.0\n"
+            "2026-01-01 01:00:00,15.0,110.0\n"
+            "2026-01-01 02:00:00,18.25,120.0\n"
+            "2026-01-01 03:00:00,20.0,130.0\n"
+        )
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8")
+        tmp.write(csv_content)
+        tmp.close()
+
+        try:
+            rows = _read_csv_rows(tmp.name)
+            self.assertEqual(len(rows), 5)
+
+            # Test selecting Column 1 (DateTime), rows 2 to 4
+            col_dlg = CsvColumnImportDialog(rows, file_path=tmp.name)
+            col_dlg.combo_column.setCurrentIndex(0)
+            col_dlg.spin_start_row.setValue(2)
+            col_dlg.spin_end_row.setValue(4)
+            col_dlg.accept()
+            self.assertEqual(col_dlg.result(), QDialog.Accepted)
+            dts = col_dlg.get_selected_values()
+            self.assertEqual(dts, [
+                "2026-01-01 00:00:00",
+                "2026-01-01 01:00:00",
+                "2026-01-01 02:00:00",
+            ])
+
+            # Test selecting Column 2 (Inflow_1), rows 2 to 4
+            col_dlg.combo_column.setCurrentIndex(1)
+            vals = col_dlg.get_selected_values()
+            self.assertEqual(vals, ["12.5", "15.0", "18.25"])
+
+            # Test SeriesValuesDialog CSV import using selected column and row range
+            series_dlg = SeriesValuesDialog("Inflow_1", dts)
+            with patch("rtc_tools_qgis_plugin.timeseries_import_dialog.QFileDialog.getOpenFileName", return_value=(tmp.name, "CSV Files (*.csv)")), \
+                 patch.object(CsvColumnImportDialog, "exec_", return_value=QDialog.Accepted), \
+                 patch.object(CsvColumnImportDialog, "get_selected_values", return_value=vals):
+                series_dlg._import_csv()
+
+            self.assertEqual(series_dlg.get_events(), {
+                "2026-01-01 00:00:00": "12.5",
+                "2026-01-01 01:00:00": "15.0",
+                "2026-01-01 02:00:00": "18.25",
+            })
+
+            # Test TimeseriesImportDialog Tab 1 CSV import
+            ts_dlg = TimeseriesImportDialog()
+            with patch("rtc_tools_qgis_plugin.timeseries_import_dialog.QFileDialog.getOpenFileName", return_value=(tmp.name, "CSV Files (*.csv)")), \
+                 patch.object(CsvColumnImportDialog, "exec_", return_value=QDialog.Accepted), \
+                 patch.object(CsvColumnImportDialog, "get_selected_values", return_value=dts):
+                ts_dlg._import_dt_csv()
+
+            self.assertEqual(ts_dlg.get_updated_data()["datetimes"], dts)
+        finally:
+            if os.path.exists(tmp.name):
+                os.remove(tmp.name)
+
     @patch("rtc_tools_qgis_plugin.dock_widget.QFileDialog.getExistingDirectory")
     @patch("rtc_tools_qgis_plugin.dock_widget.QInputDialog.getText")
     def test_construct_and_save_use_gui_fields_without_prompting(self, mock_get_text, mock_get_dir):
