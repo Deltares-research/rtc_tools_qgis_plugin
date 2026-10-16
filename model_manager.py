@@ -1,6 +1,8 @@
 import json
+import keyword
 import math
 import os
+import re
 from qgis.core import (
     QgsVectorLayer,
     QgsFeature,
@@ -34,6 +36,24 @@ class ModelManager(QObject):
     NODES_LAYER_NAME = "RTC-Tools Elements"
     BRANCHES_LAYER_NAME = "RTC-Tools Branches"
 
+    MODELICA_RESERVED_KEYWORDS = frozenset({
+        "algorithm", "and", "annotation", "block", "break", "class", "connect",
+        "connector", "constant", "constrainedby", "der", "discrete", "each",
+        "else", "elseif", "elsewhen", "encapsulated", "end", "enumeration",
+        "equation", "expandable", "extends", "external", "false", "final",
+        "flow", "for", "function", "if", "import", "impure", "in", "initial",
+        "inner", "input", "loop", "model", "not", "operator", "or", "outer",
+        "output", "package", "parameter", "partial", "protected", "public",
+        "pure", "record", "redeclare", "replaceable", "return", "stream",
+        "then", "time", "true", "type", "when", "while", "within",
+    })
+
+    WINDOWS_RESERVED_NAMES = frozenset({
+        "CON", "PRN", "AUX", "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    })
+
     def __init__(self, iface):
         super().__init__()
         self.iface = iface
@@ -44,8 +64,70 @@ class ModelManager(QObject):
         self.rtc_data_config = []
         self.rtc_parameter_config = []
         self.timeseries_import = {}
+        self.model_name = ""
+        self.working_dir = ""
         self.last_saved_json_path = None
         self._element_counter = 0
+
+    @classmethod
+    def is_valid_model_name(cls, model_name):
+        """Returns True if model_name is a single safe identifier for paths, Modelica, and Python."""
+        if not isinstance(model_name, str):
+            return False
+        cleaned = model_name.strip()
+        if not cleaned:
+            return False
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", cleaned):
+            return False
+        if keyword.iskeyword(cleaned) or cleaned in cls.MODELICA_RESERVED_KEYWORDS:
+            return False
+        if cleaned.upper() in cls.WINDOWS_RESERVED_NAMES:
+            return False
+        return True
+
+    def get_model_name(self):
+        """Returns the current model name."""
+        return self.model_name
+
+    def set_model_name(self, model_name):
+        """Sets the current model name if valid, or clears it if empty."""
+        cleaned = str(model_name or "").strip()
+        if not cleaned:
+            self.model_name = ""
+            return True
+        if not self.is_valid_model_name(cleaned):
+            self.model_name = ""
+            return False
+        self.model_name = cleaned
+        return True
+
+    def get_working_dir(self):
+        """Returns the current working directory."""
+        return self.working_dir
+
+    def set_working_dir(self, working_dir):
+        """Sets the current working directory."""
+        cleaned = str(working_dir or "").strip()
+        self.working_dir = os.path.abspath(cleaned) if cleaned else ""
+
+    def get_model_dir(self):
+        """Returns the full path to the model directory (<working_dir>/<model_name>)."""
+        if self.working_dir and self.is_valid_model_name(self.model_name):
+            return os.path.join(self.working_dir, self.model_name)
+        if self.last_saved_json_path:
+            parent_dir = os.path.dirname(self.last_saved_json_path)
+            inferred_name = os.path.splitext(os.path.basename(self.last_saved_json_path))[0]
+            if os.path.basename(parent_dir) == inferred_name:
+                return parent_dir
+            if self.is_valid_model_name(inferred_name):
+                return os.path.join(parent_dir, inferred_name)
+        return None
+
+    def get_json_path(self):
+        """Returns the full path to the model JSON file (<working_dir>/<model_name>/<model_name>.json)."""
+        if self.working_dir and self.is_valid_model_name(self.model_name):
+            return os.path.join(self.working_dir, self.model_name, f"{self.model_name}.json")
+        return self.last_saved_json_path
 
     def get_canvas_crs(self):
         """Returns current canvas CRS auth ID (e.g. 'EPSG:4326')."""
@@ -834,6 +916,16 @@ class ModelManager(QObject):
         self._element_counter = 0
         self.modelCleared.emit()
 
+    def close_model(self):
+        """Closes the currently opened model, clearing all elements, configurations, model name, and working directory."""
+        self.clear_all()
+        self.model_name = ""
+        self.working_dir = ""
+        self.last_saved_json_path = None
+        if self.iface and self.iface.mapCanvas():
+            self.iface.mapCanvas().refresh()
+        return True
+
     def get_goals(self):
         """Returns list of goal dictionaries."""
         return self.goals
@@ -1274,13 +1366,33 @@ class ModelManager(QObject):
         }
         return True
 
-    def export_to_json(self, file_path):
+    def export_to_json(self, file_path=None):
         """Exports point elements, branch connections, goal table, plot table, rtcDataConfig, rtcParameterConfig, and timeseries_import mappings to a JSON file."""
+        if not file_path:
+            file_path = self.get_json_path()
+            if not file_path:
+                return False
+
+        abs_path = os.path.abspath(file_path)
+        parent_dir = os.path.dirname(abs_path)
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+
+        inferred_name = os.path.splitext(os.path.basename(abs_path))[0]
+        if os.path.basename(parent_dir) == inferred_name and self.is_valid_model_name(inferred_name):
+            self.model_name = inferred_name
+            self.working_dir = os.path.dirname(parent_dir)
+        elif not self.model_name and self.is_valid_model_name(inferred_name):
+            self.model_name = inferred_name
+            if not self.working_dir:
+                self.working_dir = parent_dir
+
         crs_str = self.nodes_layer.crs().authid() if self.nodes_layer else self.get_canvas_crs()
         elements = self.get_all_elements()
 
         model_data = {
             "model_type": "RTC-Tools Model",
+            "model_name": self.model_name or inferred_name,
             "version": "1.0",
             "crs": crs_str,
             "element_count": len(elements),
@@ -1292,10 +1404,10 @@ class ModelManager(QObject):
             "timeseries_import": self.timeseries_import
         }
 
-        with open(file_path, "w", encoding="utf-8") as f:
+        with open(abs_path, "w", encoding="utf-8") as f:
             json.dump(model_data, f, indent=2)
 
-        self.last_saved_json_path = os.path.abspath(file_path)
+        self.last_saved_json_path = abs_path
 
         return True
 
@@ -1315,7 +1427,22 @@ class ModelManager(QObject):
         self.rtc_parameter_config = data.get("rtc_parameter_config", [])
         self.timeseries_import = data.get("timeseries_import", {})
 
-        self.last_saved_json_path = os.path.abspath(file_path)
+        abs_path = os.path.abspath(file_path)
+        self.last_saved_json_path = abs_path
+
+        file_stem = os.path.splitext(os.path.basename(abs_path))[0]
+        raw_model_name = str(data.get("model_name") or "").strip()
+        if self.is_valid_model_name(raw_model_name):
+            self.model_name = raw_model_name
+        elif self.is_valid_model_name(file_stem):
+            self.model_name = file_stem
+        else:
+            self.model_name = ""
+        parent_dir = os.path.dirname(abs_path)
+        if os.path.basename(parent_dir) == file_stem or (self.model_name and os.path.basename(parent_dir) == self.model_name):
+            self.working_dir = os.path.dirname(parent_dir)
+        else:
+            self.working_dir = parent_dir
 
         point_elems = [e for e in elements if e.get("type") != "Branch"]
         branch_elems = [e for e in elements if e.get("type") == "Branch"]
@@ -1387,11 +1514,19 @@ class ModelManager(QObject):
                 s = f"elem_{s}"
             return s or "elem"
 
-        if not model_name:
-            base_filename = os.path.splitext(os.path.basename(file_path))[0]
-            model_name = sanitize_identifier(base_filename)
+        if model_name is not None:
+            cleaned_model_name = str(model_name).strip()
+            if not self.is_valid_model_name(cleaned_model_name):
+                return False
+            model_name = cleaned_model_name
+        elif self.is_valid_model_name(self.model_name):
+            model_name = self.model_name
         else:
-            model_name = sanitize_identifier(model_name)
+            base_filename = os.path.splitext(os.path.basename(file_path))[0]
+            if self.is_valid_model_name(base_filename):
+                model_name = base_filename
+            else:
+                model_name = sanitize_identifier(base_filename)
 
         points = self.get_point_elements()
         branches = self.get_branch_elements()
@@ -1610,23 +1745,28 @@ class ModelManager(QObject):
 
         return True
 
-    def construct_rtc_tools_model(self, save_dir, model_name):
+    def construct_rtc_tools_model(self, save_dir=None, model_name=None):
         """Constructs a complete RTC-Tools model directory structure inside save_dir:
-        1. Saves <model_name>.json in save_dir.
-        2. Creates folder <model_name> inside save_dir.
+        1. Creates folder <model_name> inside save_dir.
+        2. Saves <model_name>.json inside <save_dir>/<model_name>/.
         3. Creates subfolders 'input', 'output', 'model', and 'src' inside <model_name>.
-        4. Saves goal_table.csv inside <model_name>/input/.
+        4. Saves configuration CSV/XML files inside <model_name>/input/.
         5. Generates <model_name>.mo inside <model_name>/model/.
+        6. Generates <model_name>.py inside <model_name>/src/.
         """
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir, exist_ok=True)
+        if save_dir is not None:
+            self.set_working_dir(save_dir)
+        if model_name is not None:
+            if not self.set_model_name(model_name):
+                return False
 
-        # 1. Save JSON file next to the model folder
-        json_file_path = os.path.join(save_dir, f"{model_name}.json")
-        self.export_to_json(json_file_path)
+        working_dir = self.working_dir
+        model_name = self.model_name
+        if not working_dir or not self.is_valid_model_name(model_name):
+            return False
 
-        # 2. Create model directory and subdirectories
-        model_dir = os.path.join(save_dir, model_name)
+        # 1. Create model directory and subdirectories inside working_dir
+        model_dir = os.path.join(working_dir, model_name)
         input_dir = os.path.join(model_dir, "input")
         output_dir = os.path.join(model_dir, "output")
         model_sub_dir = os.path.join(model_dir, "model")
@@ -1636,6 +1776,10 @@ class ModelManager(QObject):
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(model_sub_dir, exist_ok=True)
         os.makedirs(src_dir, exist_ok=True)
+
+        # 2. Save JSON file inside the model folder (<working_dir>/<model_name>/<model_name>.json)
+        json_file_path = os.path.join(model_dir, f"{model_name}.json")
+        self.export_to_json(json_file_path)
 
         # 3. Save goal_table.csv, plot_table.csv, rtcDataConfig.xml, rtcParameterConfig.xml, and timeseries_import.xml in input/
         goal_csv_path = os.path.join(input_dir, "goal_table.csv")
