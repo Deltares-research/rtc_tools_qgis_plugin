@@ -119,7 +119,59 @@ class RTCToolsDockWidget(QDockWidget):
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
 
-        # --- 1. Element Placement Group ---
+        # --- 1. Save / Export Group ---
+        grp_export = CollapsibleGroupBox("Model File", expanded=False)
+        layout_export = grp_export.content_layout
+
+        h_layout_model_name = QHBoxLayout()
+        h_layout_model_name.addWidget(QLabel("Model Name:"))
+        self.txt_model_name = QLineEdit()
+        self.txt_model_name.setPlaceholderText("e.g. BlueRiver")
+        self.txt_model_name.textChanged.connect(self._on_model_name_changed)
+        h_layout_model_name.addWidget(self.txt_model_name)
+        layout_export.addLayout(h_layout_model_name)
+
+        layout_export.addWidget(QLabel("Working Folder:"))
+        h_layout_work_dir = QHBoxLayout()
+        self.txt_working_dir = QLineEdit()
+        self.txt_working_dir.setPlaceholderText("Select working folder...")
+        self.txt_working_dir.textChanged.connect(self._on_working_dir_changed)
+        h_layout_work_dir.addWidget(self.txt_working_dir)
+        self.btn_browse_working_dir = QPushButton("Browse...")
+        self.btn_browse_working_dir.clicked.connect(self._browse_working_dir)
+        h_layout_work_dir.addWidget(self.btn_browse_working_dir)
+        layout_export.addLayout(h_layout_work_dir)
+
+        self.btn_validate = QPushButton("🔍 Validate Model")
+        self.btn_validate.setStyleSheet("padding: 5px;")
+        self.btn_validate.clicked.connect(self._validate_model)
+        layout_export.addWidget(self.btn_validate)
+
+        self.btn_export = QPushButton("💾 Save")
+        # self.btn_export.setStyleSheet("font-weight: bold; padding: 6px;")
+        self.btn_export.clicked.connect(self._export_model)
+        layout_export.addWidget(self.btn_export)
+
+        self.btn_save_as = QPushButton("💾➕ Save as")
+        self.btn_save_as.clicked.connect(self._save_model_as)
+        layout_export.addWidget(self.btn_save_as)
+
+        self.btn_import = QPushButton("📂 Open")
+        self.btn_import.clicked.connect(self._import_model)
+        layout_export.addWidget(self.btn_import)
+
+        self.btn_close = QPushButton("❌ Close")
+        self.btn_close.clicked.connect(self._close_model)
+        layout_export.addWidget(self.btn_close)
+
+        self.btn_construct_rtc = QPushButton("🔨 Construct RTC-Tools Model")
+        # self.btn_construct_rtc.setStyleSheet("font-weight: bold; padding: 6px;")
+        self.btn_construct_rtc.clicked.connect(self._construct_rtc_tools_model)
+        layout_export.addWidget(self.btn_construct_rtc)
+
+        layout.addWidget(grp_export)
+
+        # --- 2. Element Placement Group ---
         grp_placement = CollapsibleGroupBox("Elements", expanded=False)
         layout_placement = grp_placement.content_layout
 
@@ -318,57 +370,6 @@ class RTCToolsDockWidget(QDockWidget):
 
         layout.addWidget(grp_run)
 
-        # --- 8. Save / Export Group ---
-        grp_export = CollapsibleGroupBox("Model File", expanded=False)
-        layout_export = grp_export.content_layout
-
-        h_layout_model_name = QHBoxLayout()
-        h_layout_model_name.addWidget(QLabel("Model Name:"))
-        self.txt_model_name = QLineEdit()
-        self.txt_model_name.setPlaceholderText("e.g. BlueRiver")
-        self.txt_model_name.textChanged.connect(self._on_model_name_changed)
-        h_layout_model_name.addWidget(self.txt_model_name)
-        layout_export.addLayout(h_layout_model_name)
-
-        layout_export.addWidget(QLabel("Working Folder:"))
-        h_layout_work_dir = QHBoxLayout()
-        self.txt_working_dir = QLineEdit()
-        self.txt_working_dir.setPlaceholderText("Select working folder...")
-        self.txt_working_dir.textChanged.connect(self._on_working_dir_changed)
-        h_layout_work_dir.addWidget(self.txt_working_dir)
-        self.btn_browse_working_dir = QPushButton("Browse...")
-        self.btn_browse_working_dir.clicked.connect(self._browse_working_dir)
-        h_layout_work_dir.addWidget(self.btn_browse_working_dir)
-        layout_export.addLayout(h_layout_work_dir)
-
-        self.btn_validate = QPushButton("🔍 Validate Model")
-        self.btn_validate.setStyleSheet("padding: 5px;")
-        self.btn_validate.clicked.connect(self._validate_model)
-        layout_export.addWidget(self.btn_validate)
-
-        self.btn_export = QPushButton("💾 Save")
-        # self.btn_export.setStyleSheet("font-weight: bold; padding: 6px;")
-        self.btn_export.clicked.connect(self._export_model)
-        layout_export.addWidget(self.btn_export)
-
-        self.btn_save_as = QPushButton("💾➕ Save as")
-        self.btn_save_as.clicked.connect(self._save_model_as)
-        layout_export.addWidget(self.btn_save_as)
-
-        self.btn_import = QPushButton("📂 Open")
-        self.btn_import.clicked.connect(self._import_model)
-        layout_export.addWidget(self.btn_import)
-
-        self.btn_close = QPushButton("❌ Close")
-        self.btn_close.clicked.connect(self._close_model)
-        layout_export.addWidget(self.btn_close)
-
-        self.btn_construct_rtc = QPushButton("🔨 Construct RTC-Tools Model")
-        # self.btn_construct_rtc.setStyleSheet("font-weight: bold; padding: 6px;")
-        self.btn_construct_rtc.clicked.connect(self._construct_rtc_tools_model)
-        layout_export.addWidget(self.btn_construct_rtc)
-
-        layout.addWidget(grp_export)
 
         layout.addStretch()
 

@@ -154,14 +154,25 @@ class TestDockWidget(unittest.TestCase):
         self.dock._on_element_placed({"name": "Node 1", "type": "Node"})
 
     def test_model_name_and_working_dir_ui_components_and_sync(self):
+        from rtc_tools_qgis_plugin.dock_widget import CollapsibleGroupBox
         self.assertIsNotNone(self.dock.txt_model_name)
         self.assertIsNotNone(self.dock.txt_working_dir)
         self.assertIsNotNone(self.dock.btn_browse_working_dir)
-        self.assertEqual(self.dock.btn_export.text(), "Save")
-        self.assertEqual(self.dock.btn_save_as.text(), "Save as")
-        self.assertEqual(self.dock.btn_import.text(), "Open")
-        self.assertEqual(self.dock.btn_close.text(), "Close")
+        self.assertEqual(self.dock.btn_export.text(), "💾 Save")
+        self.assertEqual(self.dock.btn_save_as.text(), "💾➕ Save as")
+        self.assertEqual(self.dock.btn_import.text(), "📂 Open")
+        self.assertEqual(self.dock.btn_close.text(), "❌ Close")
         self.assertFalse(hasattr(self.dock, "btn_export_mo"))
+
+        # Verify "Model File" is the first section in the main layout
+        main_layout = self.dock.widget().widget().layout()
+        groups = [
+            main_layout.itemAt(i).widget()
+            for i in range(main_layout.count())
+            if isinstance(main_layout.itemAt(i).widget(), CollapsibleGroupBox)
+        ]
+        self.assertGreater(len(groups), 0)
+        self.assertEqual(groups[0].title(), "Model File")
 
         self.dock.txt_model_name.setText("BlueRiver")
         self.dock.txt_working_dir.setText("/tmp/work")
