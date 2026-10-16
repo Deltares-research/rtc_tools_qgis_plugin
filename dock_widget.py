@@ -103,6 +103,7 @@ class RTCToolsDockWidget(QDockWidget):
 
         self._init_ui()
         self._connect_signals()
+        self._sync_model_context_to_ui()
         self.refresh_table()
 
     def _init_ui(self):
@@ -321,15 +322,38 @@ class RTCToolsDockWidget(QDockWidget):
         grp_export = CollapsibleGroupBox("Model File", expanded=False)
         layout_export = grp_export.content_layout
 
+        h_layout_model_name = QHBoxLayout()
+        h_layout_model_name.addWidget(QLabel("Model Name:"))
+        self.txt_model_name = QLineEdit()
+        self.txt_model_name.setPlaceholderText("e.g. BlueRiver")
+        self.txt_model_name.textChanged.connect(self._on_model_name_changed)
+        h_layout_model_name.addWidget(self.txt_model_name)
+        layout_export.addLayout(h_layout_model_name)
+
+        layout_export.addWidget(QLabel("Working Folder:"))
+        h_layout_work_dir = QHBoxLayout()
+        self.txt_working_dir = QLineEdit()
+        self.txt_working_dir.setPlaceholderText("Select working folder...")
+        self.txt_working_dir.textChanged.connect(self._on_working_dir_changed)
+        h_layout_work_dir.addWidget(self.txt_working_dir)
+        self.btn_browse_working_dir = QPushButton("Browse...")
+        self.btn_browse_working_dir.clicked.connect(self._browse_working_dir)
+        h_layout_work_dir.addWidget(self.btn_browse_working_dir)
+        layout_export.addLayout(h_layout_work_dir)
+
         self.btn_validate = QPushButton("🔍 Validate Model")
         self.btn_validate.setStyleSheet("padding: 5px;")
         self.btn_validate.clicked.connect(self._validate_model)
         layout_export.addWidget(self.btn_validate)
 
-        self.btn_export = QPushButton("💾 Save Model to JSON...")
+        self.btn_export = QPushButton("💾 Save Model to JSON")
         self.btn_export.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_export.clicked.connect(self._export_model)
         layout_export.addWidget(self.btn_export)
+
+        self.btn_save_as = QPushButton("💾 Save Model As...")
+        self.btn_save_as.clicked.connect(self._save_model_as)
+        layout_export.addWidget(self.btn_save_as)
 
         self.btn_import = QPushButton("📂 Open Model from JSON...")
         self.btn_import.clicked.connect(self._import_model)
@@ -340,7 +364,7 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_export_mo.clicked.connect(self._export_modelica)
         layout_export.addWidget(self.btn_export_mo)
 
-        self.btn_construct_rtc = QPushButton("🚀 Construct RTC-Tools Model...")
+        self.btn_construct_rtc = QPushButton("🚀 Construct RTC-Tools Model")
         self.btn_construct_rtc.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_construct_rtc.clicked.connect(self._construct_rtc_tools_model)
         layout_export.addWidget(self.btn_construct_rtc)
@@ -558,6 +582,113 @@ class RTCToolsDockWidget(QDockWidget):
         if reply == QMessageBox.Yes:
             self.model_manager.clear_all()
 
+    def get_model_name(self):
+        """Returns the current model name from UI or model_manager."""
+        ui_val = self.txt_model_name.text().strip() if hasattr(self, "txt_model_name") else ""
+        if ui_val:
+            return ui_val
+        return self.model_manager.get_model_name()
+
+    def set_model_name(self, model_name):
+        """Sets the model name in both UI and model_manager."""
+        cleaned = str(model_name or "").strip()
+        self.model_manager.set_model_name(cleaned)
+        if hasattr(self, "txt_model_name") and self.txt_model_name.text().strip() != cleaned:
+            self.txt_model_name.blockSignals(True)
+            self.txt_model_name.setText(cleaned)
+            self.txt_model_name.blockSignals(False)
+        self._update_run_buttons_state()
+
+    def get_working_dir(self):
+        """Returns the current working directory from UI or model_manager."""
+        ui_val = self.txt_working_dir.text().strip() if hasattr(self, "txt_working_dir") else ""
+        if ui_val:
+            return os.path.abspath(ui_val)
+        return self.model_manager.get_working_dir()
+
+    def set_working_dir(self, working_dir):
+        """Sets the working directory in both UI and model_manager."""
+        cleaned = str(working_dir or "").strip()
+        abs_dir = os.path.abspath(cleaned) if cleaned else ""
+        self.model_manager.set_working_dir(abs_dir)
+        if hasattr(self, "txt_working_dir") and self.txt_working_dir.text().strip() != abs_dir:
+            self.txt_working_dir.blockSignals(True)
+            self.txt_working_dir.setText(abs_dir)
+            self.txt_working_dir.blockSignals(False)
+        self._update_run_buttons_state()
+
+    def _on_model_name_changed(self, text):
+        self.model_manager.set_model_name(text.strip())
+        self._update_run_buttons_state()
+
+    def _on_working_dir_changed(self, text):
+        self.model_manager.set_working_dir(text.strip())
+        self._update_run_buttons_state()
+
+    def _browse_working_dir(self):
+        """Allows user to browse for the working folder."""
+        start_dir = self.get_working_dir() or os.path.expanduser("~")
+        selected_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Select Working Folder",
+            start_dir
+        )
+        if selected_dir:
+            self.set_working_dir(selected_dir)
+
+    def _sync_model_context_to_ui(self):
+        """Synchronizes model_name and working_dir from model_manager into the UI fields."""
+        mm_name = self.model_manager.get_model_name()
+        mm_dir = self.model_manager.get_working_dir()
+        if hasattr(self, "txt_model_name"):
+            self.txt_model_name.blockSignals(True)
+            self.txt_model_name.setText(mm_name)
+            self.txt_model_name.blockSignals(False)
+        if hasattr(self, "txt_working_dir"):
+            self.txt_working_dir.blockSignals(True)
+            self.txt_working_dir.setText(mm_dir)
+            self.txt_working_dir.blockSignals(False)
+        self._update_run_buttons_state()
+
+    def _ensure_model_context(self, force_prompt=False):
+        """Ensures model_name and working_dir are set, prompting only if missing or if force_prompt is True.
+
+        Returns:
+            tuple: (working_dir, model_name) or (None, None) if user cancelled.
+        """
+        current_name = self.get_model_name()
+        current_dir = self.get_working_dir()
+
+        if force_prompt or not current_name:
+            default_name = current_name or "rtc_model"
+            title = "Save Model As - Model Name" if force_prompt else "RTC-Tools Model Name"
+            model_name, ok = QInputDialog.getText(
+                self,
+                title,
+                "Enter the RTC-Tools model name:",
+                QLineEdit.Normal,
+                default_name
+            )
+            if not ok or not model_name.strip():
+                return None, None
+            current_name = model_name.strip()
+
+        if force_prompt or not current_dir:
+            default_dir = current_dir or os.path.expanduser("~")
+            title = "Select Working Folder for Saving RTC-Tools Model"
+            working_dir = QFileDialog.getExistingDirectory(
+                self,
+                title,
+                default_dir
+            )
+            if not working_dir or not working_dir.strip():
+                return None, None
+            current_dir = os.path.abspath(working_dir.strip())
+
+        self.set_model_name(current_name)
+        self.set_working_dir(current_dir)
+        return current_dir, current_name
+
     def _validate_model(self):
         """Validates element connections and topology, showing a detailed message dialog."""
         is_valid, issues = self.model_manager.validate_model()
@@ -569,12 +700,13 @@ class RTCToolsDockWidget(QDockWidget):
                 "✅ <b>Model Validation Successful!</b><br><br>"
                 "All elements and branch connections meet the RTC-Tools topology requirements."
             )
-            self.iface.messageBar().pushMessage(
-                "RTC-Tools",
-                "Model validation passed successfully!",
-                level=Qgis.MessageLevel.Success,
-                duration=4
-            )
+            if self.iface and self.iface.messageBar():
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    "Model validation passed successfully!",
+                    level=Qgis.MessageLevel.Success,
+                    duration=4
+                )
         else:
             issue_items = "".join([f"<li>{issue}</li>" for issue in issues])
             msg_box = QMessageBox(self)
@@ -603,18 +735,17 @@ class RTCToolsDockWidget(QDockWidget):
             if reply == QMessageBox.No:
                 return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save RTC-Tools Model",
-            os.path.expanduser("~/rtc_tools_model.json"),
-            "JSON Files (*.json);;All Files (*)"
-        )
+        working_dir, model_name = self._ensure_model_context(force_prompt=False)
+        if not working_dir or not model_name:
+            return
 
-        if file_path:
-            if not file_path.lower().endswith(".json"):
-                file_path += ".json"
+        model_dir = os.path.join(working_dir, model_name)
+        os.makedirs(model_dir, exist_ok=True)
+        file_path = os.path.join(model_dir, f"{model_name}.json")
 
-            if self.model_manager.export_to_json(file_path):
+        if self.model_manager.export_to_json(file_path):
+            self._sync_model_context_to_ui()
+            if self.iface and self.iface.messageBar():
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Model saved successfully to '{file_path}'",
@@ -622,22 +753,62 @@ class RTCToolsDockWidget(QDockWidget):
                     duration=5
                 )
 
+    def _save_model_as(self):
+        """Prompts user for a new model name and working directory, then saves the model."""
+        elements = self.model_manager.get_all_elements()
+        if not elements:
+            QMessageBox.warning(self, "RTC-Tools", "No elements in the model to export.")
+            return
+
+        is_valid, issues = self.model_manager.validate_model()
+        if not is_valid:
+            issue_text = "\n".join([f"• {issue}" for issue in issues])
+            reply = QMessageBox.question(
+                self,
+                "Validation Warnings Detected",
+                f"The model has the following validation issues:\n\n{issue_text}\n\nDo you still want to export to JSON?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
+        working_dir, model_name = self._ensure_model_context(force_prompt=True)
+        if not working_dir or not model_name:
+            return
+
+        model_dir = os.path.join(working_dir, model_name)
+        os.makedirs(model_dir, exist_ok=True)
+        file_path = os.path.join(model_dir, f"{model_name}.json")
+
+        if self.model_manager.export_to_json(file_path):
+            self._sync_model_context_to_ui()
+            if self.iface and self.iface.messageBar():
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"Model saved as '{model_name}' to '{file_path}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
+
     def _import_model(self):
+        start_dir = self.get_working_dir() or os.path.expanduser("~")
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open RTC-Tools Model",
-            os.path.expanduser("~"),
+            start_dir,
             "JSON Files (*.json);;All Files (*)"
         )
 
         if file_path:
             if self.model_manager.import_from_json(file_path):
-                self.iface.messageBar().pushMessage(
-                    "RTC-Tools",
-                    f"Loaded model from '{file_path}'",
-                    level=Qgis.MessageLevel.Success,
-                    duration=5
-                )
+                self._sync_model_context_to_ui()
+                if self.iface and self.iface.messageBar():
+                    self.iface.messageBar().pushMessage(
+                        "RTC-Tools",
+                        f"Loaded model from '{file_path}'",
+                        level=Qgis.MessageLevel.Success,
+                        duration=5
+                    )
             else:
                 QMessageBox.critical(self, "RTC-Tools", f"Failed to load model from '{file_path}'")
 
@@ -660,18 +831,16 @@ class RTCToolsDockWidget(QDockWidget):
             if reply == QMessageBox.No:
                 return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Construct Modelica File",
-            os.path.expanduser("~/rtc_tools_model.mo"),
-            "Modelica Files (*.mo);;All Files (*)"
-        )
+        working_dir, model_name = self._ensure_model_context(force_prompt=False)
+        if not working_dir or not model_name:
+            return
 
-        if file_path:
-            if not file_path.lower().endswith(".mo"):
-                file_path += ".mo"
+        model_sub_dir = os.path.join(working_dir, model_name, "model")
+        os.makedirs(model_sub_dir, exist_ok=True)
+        file_path = os.path.join(model_sub_dir, f"{model_name}.mo")
 
-            if self.model_manager.export_to_modelica(file_path):
+        if self.model_manager.export_to_modelica(file_path, model_name=model_name):
+            if self.iface and self.iface.messageBar():
                 self.iface.messageBar().pushMessage(
                     "RTC-Tools",
                     f"Modelica file constructed successfully at '{file_path}'",
@@ -680,7 +849,7 @@ class RTCToolsDockWidget(QDockWidget):
                 )
 
     def _construct_rtc_tools_model(self):
-        """Asks user for RTC-Tools model name and save location, then constructs full project directory structure."""
+        """Uses configured model name and working folder (prompting only if not yet set) to construct full project directory structure."""
         elements = self.model_manager.get_all_elements()
         if not elements:
             QMessageBox.warning(self, "RTC-Tools", "No elements in the model to export.")
@@ -698,32 +867,20 @@ class RTCToolsDockWidget(QDockWidget):
             if reply == QMessageBox.No:
                 return
 
-        model_name, ok = QInputDialog.getText(
-            self,
-            "RTC-Tools Model Name",
-            "Enter the RTC-Tools model name:",
-            QLineEdit.Normal,
-            "rtc_model"
-        )
-        if not ok or not model_name.strip():
-            return
-        model_name = model_name.strip()
-
-        save_dir = QFileDialog.getExistingDirectory(
-            self,
-            "Select Location for Saving RTC-Tools Model",
-            os.path.expanduser("~")
-        )
-        if not save_dir:
+        working_dir, model_name = self._ensure_model_context(force_prompt=False)
+        if not working_dir or not model_name:
             return
 
-        if self.model_manager.construct_rtc_tools_model(save_dir, model_name):
-            self.iface.messageBar().pushMessage(
-                "RTC-Tools",
-                f"RTC-Tools model '{model_name}' constructed successfully in '{save_dir}'",
-                level=Qgis.MessageLevel.Success,
-                duration=5
-            )
+        if self.model_manager.construct_rtc_tools_model(working_dir, model_name):
+            self._sync_model_context_to_ui()
+            model_dir = os.path.join(working_dir, model_name)
+            if self.iface and self.iface.messageBar():
+                self.iface.messageBar().pushMessage(
+                    "RTC-Tools",
+                    f"RTC-Tools model '{model_name}' constructed successfully in '{model_dir}'",
+                    level=Qgis.MessageLevel.Success,
+                    duration=5
+                )
 
     def _edit_goal_table(self):
         """Opens the Goal Table Editor dialog."""
@@ -1000,15 +1157,9 @@ class RTCToolsDockWidget(QDockWidget):
 
     def _get_current_model_context(self):
         """Returns tuple (json_path, model_dir, model_name) if valid saved model exists."""
-        json_path = getattr(self.model_manager, "last_saved_json_path", None)
+        json_path, model_dir, model_name = self.get_current_model_context_for_ui()
         if not json_path or not os.path.exists(json_path):
             return None, None, None
-
-        base_dir = os.path.dirname(json_path)
-        json_filename = os.path.basename(json_path)
-        model_name = os.path.splitext(json_filename)[0]
-
-        model_dir = os.path.join(base_dir, model_name)
         return json_path, model_dir, model_name
 
     def _update_run_buttons_state(self):
@@ -1037,12 +1188,22 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_show_final_result.setEnabled(has_final_result)
 
     def get_current_model_context_for_ui(self):
+        working_dir = self.get_working_dir()
+        model_name = self.get_model_name()
+        if working_dir and model_name:
+            model_dir = os.path.join(working_dir, model_name)
+            json_path = os.path.join(model_dir, f"{model_name}.json")
+            return json_path, model_dir, model_name
+
         json_path = getattr(self.model_manager, "last_saved_json_path", None)
         if not json_path:
             return None, None, None
         base_dir = os.path.dirname(json_path)
         model_name = os.path.splitext(os.path.basename(json_path))[0]
-        model_dir = os.path.join(base_dir, model_name)
+        if os.path.basename(base_dir) == model_name:
+            model_dir = base_dir
+        else:
+            model_dir = os.path.join(base_dir, model_name)
         return json_path, model_dir, model_name
 
     def _run_rtc_tools_model(self):

@@ -153,6 +153,110 @@ class TestDockWidget(unittest.TestCase):
         self.dock._on_element_placed(None)
         self.dock._on_element_placed({"name": "Node 1", "type": "Node"})
 
+    def test_model_name_and_working_dir_ui_components_and_sync(self):
+        self.assertIsNotNone(self.dock.txt_model_name)
+        self.assertIsNotNone(self.dock.txt_working_dir)
+        self.assertIsNotNone(self.dock.btn_browse_working_dir)
+        self.assertIsNotNone(self.dock.btn_save_as)
+
+        self.dock.txt_model_name.setText("BlueRiver")
+        self.dock.txt_working_dir.setText("/tmp/work")
+        self.assertEqual(self.mm.get_model_name(), "BlueRiver")
+        self.assertEqual(self.mm.get_working_dir(), __import__("os").path.abspath("/tmp/work"))
+
+    @patch("rtc_tools_qgis_plugin.dock_widget.QFileDialog.getExistingDirectory")
+    @patch("rtc_tools_qgis_plugin.dock_widget.QInputDialog.getText")
+    def test_construct_and_save_use_gui_fields_without_prompting(self, mock_get_text, mock_get_dir):
+        import os
+        import shutil
+        import tempfile
+
+        work_dir = tempfile.mkdtemp()
+        try:
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+
+            self.dock.txt_model_name.setText("BlueRiver")
+            self.dock.txt_working_dir.setText(work_dir)
+
+            self.dock._construct_rtc_tools_model()
+
+            # Should not prompt since model name and working folder are already specified
+            mock_get_text.assert_not_called()
+            mock_get_dir.assert_not_called()
+
+            model_dir = os.path.join(work_dir, "BlueRiver")
+            json_path = os.path.join(model_dir, "BlueRiver.json")
+            self.assertTrue(os.path.isfile(json_path))
+            self.assertTrue(os.path.isdir(os.path.join(model_dir, "input")))
+            self.assertTrue(os.path.isdir(os.path.join(model_dir, "model")))
+            self.assertTrue(os.path.isdir(os.path.join(model_dir, "output")))
+            self.assertTrue(os.path.isdir(os.path.join(model_dir, "src")))
+
+            # Subsequent save and construct actions also do not prompt
+            self.mm.move_element("Level 1", QgsPointXY(20.0, 30.0))
+            self.dock._export_model()
+            self.dock._construct_rtc_tools_model()
+            mock_get_text.assert_not_called()
+            mock_get_dir.assert_not_called()
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    @patch("rtc_tools_qgis_plugin.dock_widget.QFileDialog.getExistingDirectory")
+    @patch("rtc_tools_qgis_plugin.dock_widget.QInputDialog.getText")
+    def test_prompt_once_then_remember_and_save_as(self, mock_get_text, mock_get_dir):
+        import os
+        import shutil
+        import tempfile
+
+        work_dir_1 = tempfile.mkdtemp()
+        work_dir_2 = tempfile.mkdtemp()
+        try:
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+
+            mock_get_text.return_value = ("BlueRiver", True)
+            mock_get_dir.return_value = work_dir_1
+
+            # 1st construct prompts because fields are initially empty
+            self.dock._construct_rtc_tools_model()
+            self.assertEqual(mock_get_text.call_count, 1)
+            self.assertEqual(mock_get_dir.call_count, 1)
+            self.assertEqual(self.dock.txt_model_name.text(), "BlueRiver")
+            self.assertEqual(self.dock.txt_working_dir.text(), os.path.abspath(work_dir_1))
+            self.assertTrue(os.path.isfile(os.path.join(work_dir_1, "BlueRiver", "BlueRiver.json")))
+
+            # 2nd construct and save do NOT prompt again
+            mock_get_text.reset_mock()
+            mock_get_dir.reset_mock()
+            self.dock._construct_rtc_tools_model()
+            self.dock._export_model()
+            mock_get_text.assert_not_called()
+            mock_get_dir.assert_not_called()
+
+            # Save Model As prompts for new name and location and updates GUI
+            mock_get_text.return_value = ("GreenRiver", True)
+            mock_get_dir.return_value = work_dir_2
+            self.dock._save_model_as()
+            self.assertEqual(mock_get_text.call_count, 1)
+            self.assertEqual(mock_get_dir.call_count, 1)
+            self.assertEqual(self.dock.txt_model_name.text(), "GreenRiver")
+            self.assertEqual(self.dock.txt_working_dir.text(), os.path.abspath(work_dir_2))
+            self.assertTrue(os.path.isfile(os.path.join(work_dir_2, "GreenRiver", "GreenRiver.json")))
+
+            # Subsequent Construct RTC-Tools Model uses GreenRiver & work_dir_2 without prompting
+            mock_get_text.reset_mock()
+            mock_get_dir.reset_mock()
+            self.dock._construct_rtc_tools_model()
+            mock_get_text.assert_not_called()
+            mock_get_dir.assert_not_called()
+            self.assertTrue(os.path.isfile(os.path.join(work_dir_2, "GreenRiver", "model", "GreenRiver.mo")))
+        finally:
+            shutil.rmtree(work_dir_1, ignore_errors=True)
+            shutil.rmtree(work_dir_2, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main()
 
