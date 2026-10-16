@@ -346,26 +346,25 @@ class RTCToolsDockWidget(QDockWidget):
         self.btn_validate.clicked.connect(self._validate_model)
         layout_export.addWidget(self.btn_validate)
 
-        self.btn_export = QPushButton("💾 Save Model to JSON")
-        self.btn_export.setStyleSheet("font-weight: bold; padding: 6px;")
+        self.btn_export = QPushButton("💾 Save")
+        # self.btn_export.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_export.clicked.connect(self._export_model)
         layout_export.addWidget(self.btn_export)
 
-        self.btn_save_as = QPushButton("💾 Save Model As...")
+        self.btn_save_as = QPushButton("💾➕ Save as")
         self.btn_save_as.clicked.connect(self._save_model_as)
         layout_export.addWidget(self.btn_save_as)
 
-        self.btn_import = QPushButton("📂 Open Model from JSON...")
+        self.btn_import = QPushButton("📂 Open")
         self.btn_import.clicked.connect(self._import_model)
         layout_export.addWidget(self.btn_import)
 
-        self.btn_export_mo = QPushButton("⚙️ Construct Modelica File...")
-        self.btn_export_mo.setStyleSheet("font-weight: bold; padding: 6px;")
-        self.btn_export_mo.clicked.connect(self._export_modelica)
-        layout_export.addWidget(self.btn_export_mo)
+        self.btn_close = QPushButton("❌ Close")
+        self.btn_close.clicked.connect(self._close_model)
+        layout_export.addWidget(self.btn_close)
 
-        self.btn_construct_rtc = QPushButton("🚀 Construct RTC-Tools Model")
-        self.btn_construct_rtc.setStyleSheet("font-weight: bold; padding: 6px;")
+        self.btn_construct_rtc = QPushButton("🔨 Construct RTC-Tools Model")
+        # self.btn_construct_rtc.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_construct_rtc.clicked.connect(self._construct_rtc_tools_model)
         layout_export.addWidget(self.btn_construct_rtc)
 
@@ -812,6 +811,25 @@ class RTCToolsDockWidget(QDockWidget):
             else:
                 QMessageBox.critical(self, "RTC-Tools", f"Failed to load model from '{file_path}'")
 
+    def _close_model(self):
+        """Closes the currently opened model and resets GUI and model manager state."""
+        if self.map_tool and hasattr(self.map_tool, "_reset_branch_selection"):
+            self.map_tool._reset_branch_selection()
+        if self.move_tool and hasattr(self.move_tool, "_cancel_move"):
+            self.move_tool._cancel_move()
+
+        self.model_manager.close_model()
+        self._sync_model_context_to_ui()
+        self.refresh_table()
+
+        if self.iface and self.iface.messageBar():
+            self.iface.messageBar().pushMessage(
+                "RTC-Tools",
+                "Closed model.",
+                level=Qgis.MessageLevel.Info,
+                duration=3
+            )
+
     def _export_modelica(self):
         """Constructs and exports a Modelica (*.mo) file."""
         elements = self.model_manager.get_all_elements()
@@ -1217,7 +1235,7 @@ class RTCToolsDockWidget(QDockWidget):
                 self,
                 "Model Not Saved",
                 "The constructed model has not been saved to a JSON file yet.\n\n"
-                "Please click 'Save Model to JSON...' or 'Construct RTC-Tools Model...' first."
+                "Please click 'Save' or 'Construct RTC-Tools Model' first."
             )
             return
 

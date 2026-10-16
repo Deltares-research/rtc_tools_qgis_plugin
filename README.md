@@ -108,7 +108,7 @@ RTC-Tools-QGIS-Plugin/
 
 ## JSON Model Output Format
 
-When exporting via **Save Model to JSON...**, the plugin generates a JSON file structured as follows:
+When exporting via **Save** or **Save as**, the plugin generates a JSON file structured as follows:
 
 ```json
 {
@@ -166,12 +166,12 @@ When exporting via **Save Model to JSON...**, the plugin generates a JSON file s
 3. Click **📍 Add Element on Map** and click canvas to place elements.
 4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
 5. To reposition an element, click **✋ Move Element on Map** and drag the node (or click to pick and click to place). Connected branches automatically update. You can also select a node in the table and click **Move**, or edit coordinates directly in the **Edit** dialog.
-6. Under **Model File**, click **🔍 Validate Model** to verify all input/output constraints.
+6. Under **Model File**, specify a **Model Name** and **Working Folder**, and click **🔍 Validate Model** to verify all input/output constraints.
 7. Under **Model Elements**, edit or delete the model elements in the table and specify bounds.
 8. Specify Goals and the corresponding plot configuration in the corresponding sub menu. 
 9. Fill in time series values under **TimeSeries Import Data** and export the time series data. 
-10. Save your model to JSON via **💾 Save Model to JSON...**.
-11. **Construct RTC-Tools Model** creates a complete RTC-Tools folder structure. 
+10. Save your model via **Save** (or **Save as** to save under a new name/working folder). Use **Close** to close the currently opened model and **Open** to load an existing model.
+11. **🚀 Construct RTC-Tools Model** creates the complete RTC-Tools folder structure inside `<WorkingFolder>/<ModelName>/`. 
 12. Export the time series import data into this folder structure with **Export XML...** under **TimeSeries Import Data** into this structure.
 13. Select a Python Environment under **Model Run** and run the RTC-Tools model with **Run RTC-Tools Model**
 

@@ -871,6 +871,16 @@ class ModelManager(QObject):
         self._element_counter = 0
         self.modelCleared.emit()
 
+    def close_model(self):
+        """Closes the currently opened model, clearing all elements, configurations, model name, and working directory."""
+        self.clear_all()
+        self.model_name = ""
+        self.working_dir = ""
+        self.last_saved_json_path = None
+        if self.iface and self.iface.mapCanvas():
+            self.iface.mapCanvas().refresh()
+        return True
+
     def get_goals(self):
         """Returns list of goal dictionaries."""
         return self.goals

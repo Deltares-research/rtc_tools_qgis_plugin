@@ -157,12 +157,55 @@ class TestDockWidget(unittest.TestCase):
         self.assertIsNotNone(self.dock.txt_model_name)
         self.assertIsNotNone(self.dock.txt_working_dir)
         self.assertIsNotNone(self.dock.btn_browse_working_dir)
-        self.assertIsNotNone(self.dock.btn_save_as)
+        self.assertEqual(self.dock.btn_export.text(), "Save")
+        self.assertEqual(self.dock.btn_save_as.text(), "Save as")
+        self.assertEqual(self.dock.btn_import.text(), "Open")
+        self.assertEqual(self.dock.btn_close.text(), "Close")
+        self.assertFalse(hasattr(self.dock, "btn_export_mo"))
 
         self.dock.txt_model_name.setText("BlueRiver")
         self.dock.txt_working_dir.setText("/tmp/work")
         self.assertEqual(self.mm.get_model_name(), "BlueRiver")
         self.assertEqual(self.mm.get_working_dir(), __import__("os").path.abspath("/tmp/work"))
+
+    @patch("rtc_tools_qgis_plugin.dock_widget.QFileDialog.getOpenFileName")
+    def test_close_model_and_open_another(self, mock_open_file):
+        import os
+        import shutil
+        import tempfile
+
+        work_dir = tempfile.mkdtemp()
+        try:
+            # Create and save first model
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+            self.dock.set_model_name("ModelOne")
+            self.dock.set_working_dir(work_dir)
+            self.dock._export_model()
+
+            model_one_json = os.path.join(work_dir, "ModelOne", "ModelOne.json")
+            self.assertTrue(os.path.isfile(model_one_json))
+
+            # Close current model
+            self.dock._close_model()
+            self.assertEqual(self.mm.get_all_elements(), [])
+            self.assertEqual(self.dock.table_elements.rowCount(), 0)
+            self.assertEqual(self.dock.txt_model_name.text(), "")
+            self.assertEqual(self.dock.txt_working_dir.text(), "")
+            self.assertEqual(self.mm.get_model_name(), "")
+            self.assertEqual(self.mm.get_working_dir(), "")
+            self.assertIsNone(self.mm.last_saved_json_path)
+
+            # Open the saved model
+            mock_open_file.return_value = (model_one_json, "JSON Files (*.json)")
+            self.dock._import_model()
+            self.assertEqual(len(self.mm.get_all_elements()), 3)
+            self.assertEqual(self.dock.table_elements.rowCount(), 3)
+            self.assertEqual(self.dock.txt_model_name.text(), "ModelOne")
+            self.assertEqual(self.dock.txt_working_dir.text(), os.path.abspath(work_dir))
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
 
     @patch("rtc_tools_qgis_plugin.dock_widget.QFileDialog.getExistingDirectory")
     @patch("rtc_tools_qgis_plugin.dock_widget.QInputDialog.getText")
