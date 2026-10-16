@@ -48,71 +48,80 @@ This QGIS plugin provides a spatial and visual interface (GUI) to:
   - `Reservoir`: Exactly 1 input and 1 output
   - `Node`: At least 1 input and exactly 1 output
   - `Branch`: Valid upstream and downstream connections
-- **Collapsible Panel Sections**: Toggle between expand/collapse states for all dock panel sections ("Elements", "Model Elements", "Optimization Goals", "Model File") to optimize screen space.
+- **Collapsible Panel Sections**: Toggle between expand/collapse states for all dock panel sections ("Model File", "Elements", "Model Elements", "Optimization Goals", "Plot Configuration", "Data Config Mapping", "Parameter Config", "TimeSeries Import Data", and "Model Construction and Run") to optimize screen space.
+- **Model File Management**:
+  - Dedicated **Model File** section at the top of the dock panel for setting the **Model Name** (validated as a valid Python/Modelica identifier) and **Working Folder** once, avoiding repetitive prompts on subsequent save or model construction actions.
+  - Supports **🔍 Validate Model**, **💾 Save**, **💾➕ Save as**, **📂 Open**, and **❌ Close** (to cleanly close the current model before starting or opening another).
 - **Optimization Goal Table**:
   - Interactive Goal Table editor supporting all RTC-Tools goal parameters (`id`, `state`, `active`, `goal_type`, `function_min`, `function_max`, `function_nominal`, `target_data_type`, `target_min`, `target_max`, `priority`, `weight`, `order`, `Description`)
   - Auto-suggests state variable names from current model elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
-  - Export & Import goals to/from RTC-Tools standard CSV format (`goal_table.csv`)
+  - Import & Export goals to/from RTC-Tools standard CSV format (`goal_table.csv`)
   - Full preservation of goal configuration inside exported and imported JSON model files
 - **Plot Table Configuration**:
   - Interactive Plot Table editor supporting columns: `id`, `y_axis_title`, `variables_style_1`, `variables_style_2`, `custom_title`, `specified_in`
   - Auto-suggests Goal IDs from the Optimization Goal Table in a drop-down menu for the `id` column
   - Auto-suggests model state variables in drop-down menus for `variables_style_1` and `variables_style_2`
   - Validates unique `id` constraints and fixes `specified_in` to `goal_generator`
-  - Export & Import plots to/from RTC-Tools standard CSV format (`plot_table.csv`)
+  - Import & Export plots to/from RTC-Tools standard CSV format (`plot_table.csv`)
   - Full preservation of plot configuration inside exported and imported JSON model files
 - **Data Config Mapping (`rtcDataConfig.xml`)**:
   - Interactive table mapping model variables (`id`) to FEWS `locationId` and `parameterId`
   - Auto-suggests model variables from placed elements (e.g. `TroutLake_V`, `TroutLake_Q_out`)
-  - Export & Import mappings to/from standard FEWS `rtcDataConfig.xml`
+  - Import & Export mappings to/from standard FEWS `rtcDataConfig.xml`
   - Full preservation of timeSeries mappings inside exported and imported JSON model files
 - **Parameter Config (`rtcParameterConfig.xml`)**:
   - Interactive table managing model parameters (`id`, `name`, `type`, `value`)
   - Supports multiple FEWS parameter types (`double`, `integer`, `boolean`, `string`, `dateTime`) with correct XML tags (`<dblValue>`, `<intValue>`, `<boolValue>`, `<stringValue>`, `<dateTimeValue>`)
-  - Export & Import parameter definitions to/from standard FEWS `rtcParameterConfig.xml`
+  - Import & Export parameter definitions to/from standard FEWS `rtcParameterConfig.xml`
   - Full preservation of parameter configuration inside exported and imported JSON model files
-- **Model Execution & Results**:
-  - Interactive **Model Run** section allowing selection of virtual environment Python executables.
-  - Comprehensive pre-flight checks (JSON saved, project folders `input`, `model`, `src`, `output`, configuration CSVs/XMLs, `<ModelName>.mo`, `<ModelName>.py`, and `timeseries_import.xml`).
-  - Runs optimization script and redirects logs to `output/rtc_tools_log.txt`.
-  - Result view buttons: **Log Messages**, **Show Result Folder**, and **Show Final Result** (`output/figures/final_results.html`).
 - **TimeSeries Import Data (`timeseries_import.xml`)**:
   - Tabbed editor for defining simulation TimeSteps (`datetimes`) and TimeSeries variable event data.
   - Supports both **nonequidistant** and **equidistant** timeStep modes (`unit` and `multiplier`).
   - Auto-suggests variable names and default `locationId`/`parameterId` headers from `rtcDataConfig.xml`.
-  - Event values can be edited directly or imported per-variable from CSV files.
-  - Export & Import definitions to/from FEWS `timeseries_import.xml`.
+  - Both simulation **TimeSteps / Datetimes** and per-variable **Series Event Values** can be edited directly or imported from CSV files using an interactive column and row-range selector dialog with table preview.
+  - Import & Export definitions to/from FEWS `timeseries_import.xml`.
   - Full preservation of timeseries import configuration inside exported and imported JSON model files.
+- **Model Construction, Execution & Results**:
+  - Interactive **Model Construction and Run** section containing **🔨 Construct RTC-Tools Model**, virtual environment Python executable selection, and **▶ Run RTC-Tools Model**.
+  - Comprehensive pre-flight checks (JSON saved, project folders `input`, `model`, `src`, `output`, configuration CSVs/XMLs, `<ModelName>.mo`, `<ModelName>.py`, and `timeseries_import.xml`).
+  - Runs optimization script and redirects logs to `output/rtc_tools_log.txt`.
+  - Result view buttons: **📄 Log Messages**, **📁 Show Result Folder**, and **🌐 Show Final Result** (`output/figures/final_results.html`).
 - **Property Management**: Edit properties, names, and custom key-value metadata.
-- **JSON Export / Import**: Save network models with node locations and branch topology to JSON or reload existing JSON models.
 
 ## Plugin Structure
 
 ```
 RTC-Tools-QGIS-Plugin/
-├── metadata.txt                  # QGIS plugin metadata specification
-├── __init__.py                   # Plugin entry point (classFactory)
-├── plugin.py                     # Main plugin controller class (RTCToolsPlugin)
-├── model_manager.py              # Layer management, element data, topological validation, JSON export/import
-├── map_tool.py                   # Custom QgsMapTool for canvas point selection and line branch creation
-├── dock_widget.py                # RTCToolsDockWidget UI panel
-├── element_dialog.py             # Element properties editor dialog
-├── goal_table_dialog.py          # Optimization Goal Table editor dialog
-├── plot_table_dialog.py          # Plot Table editor dialog
-├── rtc_data_config_dialog.py     # FEWS rtcDataConfig editor dialog
-├── rtc_parameter_config_dialog.py# FEWS rtcParameterConfig editor dialog
-├── icon.png                      # Plugin toolbar icon
-├── LICENSE                       # MIT License
-└── README.md                     # Documentation
+├── metadata.txt                   # QGIS plugin metadata specification
+├── __init__.py                    # Plugin entry point (classFactory)
+├── plugin.py                      # Main plugin controller class (RTCToolsPlugin)
+├── model_manager.py               # Layer management, element data, topological validation, JSON/Modelica/RTC-Tools export & import
+├── map_tool.py                    # Custom QgsMapTool for canvas point placement, branch creation, and interactive node moving
+├── dock_widget.py                 # RTCToolsDockWidget UI panel
+├── element_dialog.py              # Element properties editor dialog
+├── goal_table_dialog.py           # Optimization Goal Table editor dialog
+├── plot_table_dialog.py           # Plot Table editor dialog
+├── rtc_data_config_dialog.py      # FEWS rtcDataConfig editor dialog
+├── rtc_parameter_config_dialog.py # FEWS rtcParameterConfig editor dialog
+├── timeseries_import_dialog.py    # FEWS timeseries_import editor and CSV column/row-range import dialogs
+├── run_tests.py                   # Headless QGIS test runner script
+├── tests/                         # Automated unit tests
+│   ├── test_dock_widget.py
+│   ├── test_map_tool.py
+│   └── test_model_manager.py
+├── icon.png                       # Plugin toolbar icon
+├── LICENSE                        # MIT License
+└── README.md                      # Documentation
 ```
 
 ## JSON Model Output Format
 
-When exporting via **Save** or **Save as**, the plugin generates a JSON file structured as follows:
+When exporting via **💾 Save**, **💾➕ Save as**, or **🔨 Construct RTC-Tools Model**, the plugin generates `<WorkingFolder>/<ModelName>/<ModelName>.json` structured as follows:
 
 ```json
 {
   "model_type": "RTC-Tools Model",
+  "model_name": "BlueRiver",
   "version": "1.0",
   "crs": "EPSG:4326",
   "element_count": 3,
@@ -144,7 +153,12 @@ When exporting via **Save** or **Save as**, the plugin generates a JSON file str
       "downstream": "Level 1",
       "properties": {}
     }
-  ]
+  ],
+  "goals": [],
+  "plots": [],
+  "rtc_data_config": [],
+  "rtc_parameter_config": [],
+  "timeseries_import": {}
 }
 ```
 
@@ -162,18 +176,17 @@ When exporting via **Save** or **Save as**, the plugin generates a JSON file str
 ## Usage
 
 1. Open the **RTC-Tools Model Builder** dock panel.
-2. Under **Elements**, choose an **Element Type** (`Inflow`, `Level`, `Reservoir`, `Node`).
-3. Click **📍 Add Element on Map** and click canvas to place elements.
-4. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
-5. To reposition an element, click **✋ Move Element on Map** and drag the node (or click to pick and click to place). Connected branches automatically update. You can also select a node in the table and click **Move**, or edit coordinates directly in the **Edit** dialog.
-6. Under **Model File**, specify a **Model Name** and **Working Folder**, and click **🔍 Validate Model** to verify all input/output constraints.
-7. Under **Model Elements**, edit or delete the model elements in the table and specify bounds.
-8. Specify Goals and the corresponding plot configuration in the corresponding sub menu. 
-9. Fill in time series values under **TimeSeries Import Data** and export the time series data. 
-10. Save your model via **Save** (or **Save as** to save under a new name/working folder). Use **Close** to close the currently opened model and **Open** to load an existing model.
-11. **🚀 Construct RTC-Tools Model** creates the complete RTC-Tools folder structure inside `<WorkingFolder>/<ModelName>/`. 
-12. Export the time series import data into this folder structure with **Export XML...** under **TimeSeries Import Data** into this structure.
-13. Select a Python Environment under **Model Run** and run the RTC-Tools model with **Run RTC-Tools Model**
+2. Under **Model File**, specify a valid **Model Name** (e.g. `BlueRiver`) and select a **Working Folder**.
+3. Under **Elements**, choose an **Element Type** (`Node`, `Inflow`, `Level`, `Terminal`, `Reservoir`).
+4. Click **📍 Add Element on Map** and click the canvas to place elements.
+5. Select **Branch**, click **🔗 Connect Elements with Branch**, click the upstream element, then click the downstream element.
+6. To reposition an element, click **✋ Move Element on Map** and drag the node (or click to pick and click to place). Connected branches automatically update. You can also select a node in the table and click **Move**, or edit coordinates directly in the **Edit** dialog.
+7. Under **Model Elements**, edit or delete model elements in the table and specify bounds/properties.
+8. Under **Model File**, click **🔍 Validate Model** to verify all topological input/output constraints.
+9. Configure optimization goals (**Optimization Goals**), plot definitions (**Plot Configuration**), FEWS mappings (**Data Config Mapping**), model parameters (**Parameter Config**), and simulation timesteps/series values (**TimeSeries Import Data** — including importing timesteps or values from a specific CSV column and row range).
+10. Save your model via **💾 Save** (or **💾➕ Save as** to save under a new model name or working folder). Use **❌ Close** to close the currently opened model and **📂 Open** to load an existing model from JSON.
+11. Under **Model Construction and Run**, click **🔨 Construct RTC-Tools Model** to generate the complete RTC-Tools project structure (`<ModelName>.json`, `input/`, `model/`, `output/`, and `src/`) inside `<WorkingFolder>/<ModelName>/`.
+12. Select a Python environment (if needed) under **Model Construction and Run** and click **▶ Run RTC-Tools Model** to execute the optimization, then inspect results via **📄 Log Messages**, **📁 Show Result Folder**, or **🌐 Show Final Result**.
 
 ## Running Tests
 
