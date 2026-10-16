@@ -567,12 +567,16 @@ class RTCToolsDockWidget(QDockWidget):
     def set_model_name(self, model_name):
         """Sets the model name in both UI and model_manager."""
         cleaned = str(model_name or "").strip()
+        if cleaned and not self.model_manager.is_valid_model_name(cleaned):
+            self.model_manager.set_model_name("")
+            return False
         self.model_manager.set_model_name(cleaned)
         if hasattr(self, "txt_model_name") and self.txt_model_name.text().strip() != cleaned:
             self.txt_model_name.blockSignals(True)
             self.txt_model_name.setText(cleaned)
             self.txt_model_name.blockSignals(False)
         self._update_run_buttons_state()
+        return True
 
     def get_working_dir(self):
         """Returns the current working directory from UI or model_manager."""
@@ -629,13 +633,13 @@ class RTCToolsDockWidget(QDockWidget):
         """Ensures model_name and working_dir are set, prompting only if missing or if force_prompt is True.
 
         Returns:
-            tuple: (working_dir, model_name) or (None, None) if user cancelled.
+            tuple: (working_dir, model_name) or (None, None) if user cancelled or model_name is invalid.
         """
         current_name = self.get_model_name()
         current_dir = self.get_working_dir()
 
         if force_prompt or not current_name:
-            default_name = current_name or "rtc_model"
+            default_name = current_name if self.model_manager.is_valid_model_name(current_name) else "rtc_model"
             title = "Save Model As - Model Name" if force_prompt else "RTC-Tools Model Name"
             model_name, ok = QInputDialog.getText(
                 self,
@@ -647,6 +651,16 @@ class RTCToolsDockWidget(QDockWidget):
             if not ok or not model_name.strip():
                 return None, None
             current_name = model_name.strip()
+
+        if not self.model_manager.is_valid_model_name(current_name):
+            QMessageBox.warning(
+                self,
+                "Invalid Model Name",
+                f"'{current_name}' is not a valid RTC-Tools model name.\n\n"
+                "The model name must be a valid identifier containing only letters, digits, "
+                "and underscores, cannot start with a digit, and cannot be a reserved keyword."
+            )
+            return None, None
 
         if force_prompt or not current_dir:
             default_dir = current_dir or os.path.expanduser("~")
@@ -1184,6 +1198,8 @@ class RTCToolsDockWidget(QDockWidget):
     def get_current_model_context_for_ui(self):
         working_dir = self.get_working_dir()
         model_name = self.get_model_name()
+        if model_name and not self.model_manager.is_valid_model_name(model_name):
+            return None, None, None
         if working_dir and model_name:
             model_dir = os.path.join(working_dir, model_name)
             json_path = os.path.join(model_dir, f"{model_name}.json")
@@ -1194,6 +1210,8 @@ class RTCToolsDockWidget(QDockWidget):
             return None, None, None
         base_dir = os.path.dirname(json_path)
         model_name = os.path.splitext(os.path.basename(json_path))[0]
+        if not self.model_manager.is_valid_model_name(model_name):
+            return None, None, None
         if os.path.basename(base_dir) == model_name:
             model_dir = base_dir
         else:

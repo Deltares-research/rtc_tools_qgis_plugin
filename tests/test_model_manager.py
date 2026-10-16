@@ -240,6 +240,43 @@ class TestModelManager(unittest.TestCase):
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
+    def test_model_name_validation_rejects_unsafe_or_invalid_identifiers(self):
+        import shutil
+        work_dir = tempfile.mkdtemp()
+        try:
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+
+            valid_names = ["BlueRiver", "rtc_model_1", "_ValidModel"]
+            for valid_name in valid_names:
+                self.assertTrue(ModelManager.is_valid_model_name(valid_name))
+                self.assertTrue(self.mm.set_model_name(valid_name))
+                self.assertEqual(self.mm.get_model_name(), valid_name)
+
+            invalid_names = [
+                "Blue River",
+                "../other",
+                "..\\other",
+                "sub/model",
+                "123Model",
+                "my-model",
+                "class",
+                "model",
+                "CON",
+                "BlueRiver):\n    pass #",
+            ]
+            for bad_name in invalid_names:
+                self.assertFalse(ModelManager.is_valid_model_name(bad_name), f"Expected '{bad_name}' to be invalid")
+                self.assertFalse(self.mm.set_model_name(bad_name))
+                self.assertEqual(self.mm.get_model_name(), "")
+                self.assertFalse(self.mm.construct_rtc_tools_model(work_dir, bad_name))
+
+            # Ensure no files or folders were created in work_dir or its parent from invalid names
+            self.assertEqual(os.listdir(work_dir), [])
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main()
 

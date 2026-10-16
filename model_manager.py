@@ -1,6 +1,8 @@
 import json
+import keyword
 import math
 import os
+import re
 from qgis.core import (
     QgsVectorLayer,
     QgsFeature,
@@ -34,6 +36,24 @@ class ModelManager(QObject):
     NODES_LAYER_NAME = "RTC-Tools Elements"
     BRANCHES_LAYER_NAME = "RTC-Tools Branches"
 
+    MODELICA_RESERVED_KEYWORDS = frozenset({
+        "algorithm", "and", "annotation", "block", "break", "class", "connect",
+        "connector", "constant", "constrainedby", "der", "discrete", "each",
+        "else", "elseif", "elsewhen", "encapsulated", "end", "enumeration",
+        "equation", "expandable", "extends", "external", "false", "final",
+        "flow", "for", "function", "if", "import", "impure", "in", "initial",
+        "inner", "input", "loop", "model", "not", "operator", "or", "outer",
+        "output", "package", "parameter", "partial", "protected", "public",
+        "pure", "record", "redeclare", "replaceable", "return", "stream",
+        "then", "time", "true", "type", "when", "while", "within",
+    })
+
+    WINDOWS_RESERVED_NAMES = frozenset({
+        "CON", "PRN", "AUX", "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    })
+
     def __init__(self, iface):
         super().__init__()
         self.iface = iface
@@ -49,13 +69,37 @@ class ModelManager(QObject):
         self.last_saved_json_path = None
         self._element_counter = 0
 
+    @classmethod
+    def is_valid_model_name(cls, model_name):
+        """Returns True if model_name is a single safe identifier for paths, Modelica, and Python."""
+        if not isinstance(model_name, str):
+            return False
+        cleaned = model_name.strip()
+        if not cleaned:
+            return False
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", cleaned):
+            return False
+        if keyword.iskeyword(cleaned) or cleaned in cls.MODELICA_RESERVED_KEYWORDS:
+            return False
+        if cleaned.upper() in cls.WINDOWS_RESERVED_NAMES:
+            return False
+        return True
+
     def get_model_name(self):
         """Returns the current model name."""
         return self.model_name
 
     def set_model_name(self, model_name):
-        """Sets the current model name."""
-        self.model_name = str(model_name or "").strip()
+        """Sets the current model name if valid, or clears it if empty."""
+        cleaned = str(model_name or "").strip()
+        if not cleaned:
+            self.model_name = ""
+            return True
+        if not self.is_valid_model_name(cleaned):
+            self.model_name = ""
+            return False
+        self.model_name = cleaned
+        return True
 
     def get_working_dir(self):
         """Returns the current working directory."""
@@ -68,19 +112,20 @@ class ModelManager(QObject):
 
     def get_model_dir(self):
         """Returns the full path to the model directory (<working_dir>/<model_name>)."""
-        if self.working_dir and self.model_name:
+        if self.working_dir and self.is_valid_model_name(self.model_name):
             return os.path.join(self.working_dir, self.model_name)
         if self.last_saved_json_path:
             parent_dir = os.path.dirname(self.last_saved_json_path)
             inferred_name = os.path.splitext(os.path.basename(self.last_saved_json_path))[0]
             if os.path.basename(parent_dir) == inferred_name:
                 return parent_dir
-            return os.path.join(parent_dir, inferred_name)
+            if self.is_valid_model_name(inferred_name):
+                return os.path.join(parent_dir, inferred_name)
         return None
 
     def get_json_path(self):
         """Returns the full path to the model JSON file (<working_dir>/<model_name>/<model_name>.json)."""
-        if self.working_dir and self.model_name:
+        if self.working_dir and self.is_valid_model_name(self.model_name):
             return os.path.join(self.working_dir, self.model_name, f"{self.model_name}.json")
         return self.last_saved_json_path
 
@@ -1334,10 +1379,10 @@ class ModelManager(QObject):
             os.makedirs(parent_dir, exist_ok=True)
 
         inferred_name = os.path.splitext(os.path.basename(abs_path))[0]
-        if os.path.basename(parent_dir) == inferred_name:
+        if os.path.basename(parent_dir) == inferred_name and self.is_valid_model_name(inferred_name):
             self.model_name = inferred_name
             self.working_dir = os.path.dirname(parent_dir)
-        elif not self.model_name:
+        elif not self.model_name and self.is_valid_model_name(inferred_name):
             self.model_name = inferred_name
             if not self.working_dir:
                 self.working_dir = parent_dir
@@ -1386,9 +1431,15 @@ class ModelManager(QObject):
         self.last_saved_json_path = abs_path
 
         file_stem = os.path.splitext(os.path.basename(abs_path))[0]
-        self.model_name = str(data.get("model_name") or file_stem).strip()
+        raw_model_name = str(data.get("model_name") or "").strip()
+        if self.is_valid_model_name(raw_model_name):
+            self.model_name = raw_model_name
+        elif self.is_valid_model_name(file_stem):
+            self.model_name = file_stem
+        else:
+            self.model_name = ""
         parent_dir = os.path.dirname(abs_path)
-        if os.path.basename(parent_dir) == file_stem or os.path.basename(parent_dir) == self.model_name:
+        if os.path.basename(parent_dir) == file_stem or (self.model_name and os.path.basename(parent_dir) == self.model_name):
             self.working_dir = os.path.dirname(parent_dir)
         else:
             self.working_dir = parent_dir
@@ -1463,11 +1514,19 @@ class ModelManager(QObject):
                 s = f"elem_{s}"
             return s or "elem"
 
-        if not model_name:
-            base_filename = os.path.splitext(os.path.basename(file_path))[0]
-            model_name = sanitize_identifier(base_filename)
+        if model_name is not None:
+            cleaned_model_name = str(model_name).strip()
+            if not self.is_valid_model_name(cleaned_model_name):
+                return False
+            model_name = cleaned_model_name
+        elif self.is_valid_model_name(self.model_name):
+            model_name = self.model_name
         else:
-            model_name = sanitize_identifier(model_name)
+            base_filename = os.path.splitext(os.path.basename(file_path))[0]
+            if self.is_valid_model_name(base_filename):
+                model_name = base_filename
+            else:
+                model_name = sanitize_identifier(base_filename)
 
         points = self.get_point_elements()
         branches = self.get_branch_elements()
@@ -1698,11 +1757,12 @@ class ModelManager(QObject):
         if save_dir is not None:
             self.set_working_dir(save_dir)
         if model_name is not None:
-            self.set_model_name(model_name)
+            if not self.set_model_name(model_name):
+                return False
 
         working_dir = self.working_dir
         model_name = self.model_name
-        if not working_dir or not model_name:
+        if not working_dir or not self.is_valid_model_name(model_name):
             return False
 
         # 1. Create model directory and subdirectories inside working_dir

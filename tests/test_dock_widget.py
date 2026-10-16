@@ -381,6 +381,42 @@ class TestDockWidget(unittest.TestCase):
             shutil.rmtree(work_dir_1, ignore_errors=True)
             shutil.rmtree(work_dir_2, ignore_errors=True)
 
+    @patch("rtc_tools_qgis_plugin.dock_widget.QMessageBox.warning")
+    @patch("rtc_tools_qgis_plugin.dock_widget.QFileDialog.getExistingDirectory")
+    @patch("rtc_tools_qgis_plugin.dock_widget.QInputDialog.getText")
+    def test_invalid_model_name_rejected_in_ui(self, mock_get_text, mock_get_dir, mock_warning):
+        import os
+        import shutil
+        import tempfile
+
+        work_dir = tempfile.mkdtemp()
+        try:
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+
+            self.dock.txt_working_dir.setText(work_dir)
+
+            # 1. Invalid name in text box (with spaces or path traversal) should warn and abort
+            for bad_name in ["Blue River", "../other", "123bad", "class"]:
+                mock_warning.reset_mock()
+                self.dock.txt_model_name.setText(bad_name)
+                self.dock._construct_rtc_tools_model()
+                self.assertTrue(mock_warning.called)
+                self.assertEqual(os.listdir(work_dir), [])
+                self.assertEqual(self.dock.get_current_model_context_for_ui(), (None, None, None))
+
+            # 2. Invalid name entered in Save As prompt should warn and abort
+            self.dock.txt_model_name.setText("BlueRiver")
+            mock_warning.reset_mock()
+            mock_get_text.return_value = ("../escape", True)
+            self.dock._save_model_as()
+            self.assertTrue(mock_warning.called)
+            mock_get_dir.assert_not_called()
+            self.assertEqual(os.listdir(work_dir), [])
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main()
 
