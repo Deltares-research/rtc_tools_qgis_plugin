@@ -196,6 +196,87 @@ class TestModelManager(unittest.TestCase):
         self.assertFalse(self.mm.update_element("Branch 1", new_type="Node"))
         self.assertEqual(self.mm.get_element("Branch 1")["type"], "Branch")
 
+    def test_construct_rtc_tools_model_directory_structure(self):
+        import shutil
+        work_dir = tempfile.mkdtemp()
+        try:
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+
+            self.assertTrue(self.mm.construct_rtc_tools_model(work_dir, "BlueRiver"))
+
+            expected_model_dir = os.path.join(work_dir, "BlueRiver")
+            expected_json = os.path.join(expected_model_dir, "BlueRiver.json")
+            self.assertTrue(os.path.isdir(expected_model_dir))
+            self.assertTrue(os.path.isfile(expected_json))
+            self.assertFalse(os.path.exists(os.path.join(work_dir, "BlueRiver.json")))
+
+            self.assertTrue(os.path.isdir(os.path.join(expected_model_dir, "input")))
+            self.assertTrue(os.path.isdir(os.path.join(expected_model_dir, "model")))
+            self.assertTrue(os.path.isdir(os.path.join(expected_model_dir, "output")))
+            self.assertTrue(os.path.isdir(os.path.join(expected_model_dir, "src")))
+
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "model", "BlueRiver.mo")))
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "src", "BlueRiver.py")))
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "input", "goal_table.csv")))
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "input", "plot_table.csv")))
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "input", "rtcDataConfig.xml")))
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "input", "rtcParameterConfig.xml")))
+            self.assertTrue(os.path.isfile(os.path.join(expected_model_dir, "input", "timeseries_import.xml")))
+
+            self.assertEqual(self.mm.get_model_name(), "BlueRiver")
+            self.assertEqual(self.mm.get_working_dir(), os.path.abspath(work_dir))
+            self.assertEqual(self.mm.get_model_dir(), os.path.abspath(expected_model_dir))
+            self.assertEqual(self.mm.get_json_path(), os.path.abspath(expected_json))
+
+            # Importing from the constructed JSON should infer model_name and working_dir
+            from qgis.core import QgsProject
+            QgsProject.instance().removeAllMapLayers()
+            mm2 = ModelManager(None)
+            self.assertTrue(mm2.import_from_json(expected_json))
+            self.assertEqual(mm2.get_model_name(), "BlueRiver")
+            self.assertEqual(mm2.get_working_dir(), os.path.abspath(work_dir))
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_model_name_validation_rejects_unsafe_or_invalid_identifiers(self):
+        import shutil
+        work_dir = tempfile.mkdtemp()
+        try:
+            self.mm.add_element(QgsPointXY(0.0, 0.0), element_type="Inflow", name="Inflow 1")
+            self.mm.add_element(QgsPointXY(10.0, 10.0), element_type="Level", name="Level 1")
+            self.mm.add_branch("Inflow 1", "Level 1", name="Branch 1")
+
+            valid_names = ["BlueRiver", "rtc_model_1", "_ValidModel"]
+            for valid_name in valid_names:
+                self.assertTrue(ModelManager.is_valid_model_name(valid_name))
+                self.assertTrue(self.mm.set_model_name(valid_name))
+                self.assertEqual(self.mm.get_model_name(), valid_name)
+
+            invalid_names = [
+                "Blue River",
+                "../other",
+                "..\\other",
+                "sub/model",
+                "123Model",
+                "my-model",
+                "class",
+                "model",
+                "CON",
+                "BlueRiver):\n    pass #",
+            ]
+            for bad_name in invalid_names:
+                self.assertFalse(ModelManager.is_valid_model_name(bad_name), f"Expected '{bad_name}' to be invalid")
+                self.assertFalse(self.mm.set_model_name(bad_name))
+                self.assertEqual(self.mm.get_model_name(), "")
+                self.assertFalse(self.mm.construct_rtc_tools_model(work_dir, bad_name))
+
+            # Ensure no files or folders were created in work_dir or its parent from invalid names
+            self.assertEqual(os.listdir(work_dir), [])
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -20,8 +20,113 @@ from qgis.PyQt.QtWidgets import (
     QFormLayout,
     QTabWidget,
     QWidget,
+    QSpinBox,
 )
 from qgis.PyQt.QtCore import Qt
+
+
+def _read_csv_rows(file_path):
+    """Reads non-empty rows from a CSV file."""
+    rows = []
+    with open(file_path, "r", encoding="utf-8-sig", errors="replace", newline="") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if row and any(cell.strip() for cell in row):
+                rows.append([cell.strip() for cell in row])
+    return rows
+
+
+class CsvColumnImportDialog(QDialog):
+    """Dialog allowing the user to preview a CSV file and choose a column and row range to import."""
+
+    def __init__(self, rows, file_path="", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Import from CSV - Select Column & Row Range")
+        self.resize(650, 450)
+
+        self.rows = rows or []
+        self.file_path = file_path
+        self.num_rows = len(self.rows)
+        self.num_cols = max((len(r) for r in self.rows), default=0)
+
+        self._init_ui()
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+
+        if self.file_path:
+            lbl_file = QLabel(f"<b>File:</b> {os.path.basename(self.file_path)}")
+            layout.addWidget(lbl_file)
+
+        grp_select = QGroupBox("Selection Options")
+        form = QFormLayout(grp_select)
+
+        self.combo_column = QComboBox()
+        for col_idx in range(self.num_cols):
+            first_val = self.rows[0][col_idx] if (self.num_rows > 0 and col_idx < len(self.rows[0])) else ""
+            label = f"Column {col_idx + 1} ({first_val})" if first_val else f"Column {col_idx + 1}"
+            self.combo_column.addItem(label, col_idx)
+        form.addRow("Column:", self.combo_column)
+
+        h_range = QHBoxLayout()
+        self.spin_start_row = QSpinBox()
+        self.spin_start_row.setMinimum(1)
+        self.spin_start_row.setMaximum(max(1, self.num_rows))
+        self.spin_start_row.setValue(1)
+
+        self.spin_end_row = QSpinBox()
+        self.spin_end_row.setMinimum(1)
+        self.spin_end_row.setMaximum(max(1, self.num_rows))
+        self.spin_end_row.setValue(max(1, self.num_rows))
+
+        h_range.addWidget(QLabel("From Row:"))
+        h_range.addWidget(self.spin_start_row)
+        h_range.addWidget(QLabel("To Row:"))
+        h_range.addWidget(self.spin_end_row)
+        h_range.addStretch()
+        form.addRow("Row Range:", h_range)
+
+        layout.addWidget(grp_select)
+
+        layout.addWidget(QLabel("<b>CSV Preview:</b>"))
+        self.preview_table = QTableWidget(self.num_rows, self.num_cols)
+        self.preview_table.setHorizontalHeaderLabels([f"Column {i + 1}" for i in range(self.num_cols)])
+        self.preview_table.setVerticalHeaderLabels([str(i + 1) for i in range(self.num_rows)])
+        self.preview_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        for r_idx, row in enumerate(self.rows):
+            for c_idx, val in enumerate(row):
+                self.preview_table.setItem(r_idx, c_idx, QTableWidgetItem(val))
+
+        layout.addWidget(self.preview_table)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+
+    def accept(self):
+        if self.spin_start_row.value() > self.spin_end_row.value():
+            QMessageBox.warning(self, "Invalid Row Range", "Start row must be less than or equal to end row.")
+            return
+        super().accept()
+
+    def get_selected_values(self):
+        if not self.rows or self.num_cols == 0:
+            return []
+        col_idx = self.combo_column.currentData()
+        if col_idx is None:
+            col_idx = self.combo_column.currentIndex()
+        start_idx = max(0, self.spin_start_row.value() - 1)
+        end_idx = min(self.num_rows, self.spin_end_row.value())
+
+        selected = []
+        for row in self.rows[start_idx:end_idx]:
+            val = row[col_idx].strip() if col_idx < len(row) else ""
+            selected.append(val)
+        return selected
+
 
 class TimeseriesImportDialog(QDialog):
     """Dialog for defining and editing timeseries_import.xml parameters and series events."""
@@ -127,10 +232,13 @@ class TimeseriesImportDialog(QDialog):
         btn_del_dt.clicked.connect(self._del_dt_row)
         btn_clear_dt = QPushButton("🗑️ Clear All TimeSteps")
         btn_clear_dt.clicked.connect(self._clear_dt_rows)
+        self.btn_import_dt_csv = QPushButton("📂 Import TimeSteps from CSV...")
+        self.btn_import_dt_csv.clicked.connect(self._import_dt_csv)
 
         btn_layout_dt.addWidget(btn_add_dt)
         btn_layout_dt.addWidget(btn_del_dt)
         btn_layout_dt.addWidget(btn_clear_dt)
+        btn_layout_dt.addWidget(self.btn_import_dt_csv)
         btn_layout_dt.addStretch()
         layout_dt.addLayout(btn_layout_dt)
 
@@ -209,6 +317,33 @@ class TimeseriesImportDialog(QDialog):
 
     def _clear_dt_rows(self):
         self.table_dt.setRowCount(0)
+
+    def _import_dt_csv(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import TimeSteps CSV",
+            os.path.expanduser("~"),
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        if not file_path or not os.path.exists(file_path):
+            return
+
+        try:
+            rows = _read_csv_rows(file_path)
+            if not rows:
+                QMessageBox.warning(self, "RTC-Tools", "The selected CSV file is empty.")
+                return
+
+            dlg = CsvColumnImportDialog(rows, file_path=file_path, parent=self)
+            if dlg.exec_() == QDialog.Accepted:
+                selected_dts = [v for v in dlg.get_selected_values() if v]
+                self.table_dt.setRowCount(0)
+                for dt_str in selected_dts:
+                    row = self.table_dt.rowCount()
+                    self.table_dt.insertRow(row)
+                    self.table_dt.setItem(row, 0, QTableWidgetItem(dt_str))
+        except Exception as e:
+            QMessageBox.critical(self, "RTC-Tools", f"Error reading CSV:\n{str(e)}")
 
     def _get_current_datetimes(self):
         dts = []
@@ -582,27 +717,23 @@ class SeriesValuesDialog(QDialog):
             os.path.expanduser("~"),
             "CSV Files (*.csv);;All Files (*)"
         )
-        if file_path and os.path.exists(file_path):
-            try:
-                imported_map = {}
-                with open(file_path, "r", encoding="utf-8-sig", newline="") as f:
-                    reader = csv.reader(f)
-                    for row in reader:
-                        if not row:
-                            continue
-                        if len(row) >= 2:
-                            k = row[0].strip()
-                            v = row[1].strip()
-                            imported_map[k] = v
+        if not file_path or not os.path.exists(file_path):
+            return
 
-                for r in range(self.table.rowCount()):
-                    dt_str = self.table.item(r, 0).text()
-                    if dt_str in imported_map:
-                        self.table.setItem(r, 1, QTableWidgetItem(imported_map[dt_str]))
+        try:
+            rows = _read_csv_rows(file_path)
+            if not rows:
+                QMessageBox.warning(self, "RTC-Tools", "The selected CSV file is empty.")
+                return
 
-                QMessageBox.information(self, "RTC-Tools", "Imported values from CSV successfully.")
-            except Exception as e:
-                QMessageBox.critical(self, "RTC-Tools", f"Error reading CSV:\n{str(e)}")
+            dlg = CsvColumnImportDialog(rows, file_path=file_path, parent=self)
+            if dlg.exec_() == QDialog.Accepted:
+                selected_values = dlg.get_selected_values()
+                count = min(len(selected_values), self.table.rowCount())
+                for r in range(count):
+                    self.table.setItem(r, 1, QTableWidgetItem(selected_values[r]))
+        except Exception as e:
+            QMessageBox.critical(self, "RTC-Tools", f"Error reading CSV:\n{str(e)}")
 
     def get_events(self):
         res = {}
